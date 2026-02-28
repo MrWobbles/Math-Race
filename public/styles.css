@@ -4,6 +4,23 @@
   box-sizing: border-box;
 }
 
+/* Fullscreen background timer */
+.bg-timer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0%;
+  height: 100vh;
+  background: rgba(255, 255, 255, 0.15);
+  z-index: 0;
+  pointer-events: none;
+  transition: none;
+}
+
+.bg-timer.active {
+  transition: width linear;
+}
+
 :root {
   --primary: #6366f1;
   --primary-dark: #4f46e5;
@@ -95,6 +112,8 @@ body {
 .container {
   width: 100%;
   max-width: 500px;
+  position: relative;
+  z-index: 1;
 }
 
 .screen {

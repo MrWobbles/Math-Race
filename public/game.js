@@ -73,7 +73,8 @@ const elements = {
 
   winnerTitle: document.getElementById('winner-title'),
   winnerName: document.getElementById('winner-name'),
-  finalScores: document.getElementById('final-scores')
+  finalScores: document.getElementById('final-scores'),
+  bgTimer: document.getElementById('bg-timer')
 };
 
 // Utility functions
@@ -151,6 +152,38 @@ function stopStopwatch() {
     clearInterval(stopwatchInterval);
     stopwatchInterval = null;
   }
+}
+
+// Background timer functions
+let bgTimerDuration = 0;
+
+function startBgTimer(seconds) {
+  if (!elements.bgTimer) return;
+
+  // Reset the timer
+  elements.bgTimer.classList.remove('active');
+  elements.bgTimer.style.width = '0%';
+
+  if (seconds === 0) {
+    // No time limit - use a long duration (5 minutes)
+    bgTimerDuration = 300;
+  } else {
+    bgTimerDuration = seconds;
+  }
+
+  // Force reflow to reset the animation
+  void elements.bgTimer.offsetWidth;
+
+  // Start the animation
+  elements.bgTimer.classList.add('active');
+  elements.bgTimer.style.transitionDuration = bgTimerDuration + 's';
+  elements.bgTimer.style.width = '100%';
+}
+
+function stopBgTimer() {
+  if (!elements.bgTimer) return;
+  elements.bgTimer.classList.remove('active');
+  elements.bgTimer.style.width = '0%';
 }
 
 function updateSettingsSummary() {
@@ -507,6 +540,7 @@ socket.on('question-start', ({ question, questionNumber, totalQuestions, timeLim
 
   startTimer(timeLimit || 10);
   startStopwatch();
+  startBgTimer(timeLimit || 10);
   showScreen('game');
 });
 
@@ -519,6 +553,7 @@ socket.on('answer-submitted', ({ playerId }) => {
 socket.on('round-results', (results) => {
   clearInterval(timerInterval);
   stopStopwatch();
+  stopBgTimer();
 
   // Build results HTML
   let resultsHtml = '';
