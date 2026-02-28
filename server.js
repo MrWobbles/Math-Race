@@ -656,20 +656,33 @@ function calculateRoundResults(room) {
       let coinsChange = 0;
       let pointsEarned = 0;
 
-      if (winner && p.id === winner.id) {
-        pointsEarned = 10 + Math.floor((5000 - Math.min(p.answerTime, 5000)) / 100);
-        const opponent = room.players.find(op => op.id !== p.id);
-        if (opponent) {
-          coinsChange = opponent.bet;
+      if (winner) {
+        // There is a winner
+        if (p.id === winner.id) {
+          // Winner gets points and opponent's bet
+          pointsEarned = 10 + Math.floor((5000 - Math.min(p.answerTime, 5000)) / 100);
+          const opponent = room.players.find(op => op.id !== p.id);
+          if (opponent) {
+            coinsChange = opponent.bet;
+          }
+        } else {
+          // Loser loses their bet (even if they got it correct but slower)
+          if (correct) {
+            pointsEarned = 5; // Some points for being correct
+          }
+          coinsChange = -p.bet;
         }
-      } else if (correct) {
-        pointsEarned = 5;
       } else {
-        coinsChange = -p.bet;
+        // No winner (both wrong or no answers)
+        if (!correct) {
+          coinsChange = -p.bet; // Lose bet if wrong
+        }
+        // If correct but no winner (shouldn't happen in 1v1), keep bet
       }
 
       p.score += pointsEarned;
       p.coins += coinsChange;
+      if (p.coins < 0) p.coins = 0; // Floor at 0
 
       return {
         id: p.id,
@@ -730,24 +743,29 @@ function calculateRoundResults(room) {
       ? p.batchAnswers.reduce((sum, a) => sum + a.time, 0) / p.batchAnswers.length
       : 0;
 
-    if (batchWinner && p.id === batchWinner.id) {
-      // Winner gets points per correct answer + pot
-      pointsEarned = p.batchCorrect * 10;
-      const opponent = room.players.find(op => op.id !== p.id);
-      if (opponent) {
-        coinsChange = opponent.bet;
+    if (batchWinner) {
+      // There is a winner
+      if (p.id === batchWinner.id) {
+        // Winner gets points per correct answer + opponent's bet
+        pointsEarned = p.batchCorrect * 10;
+        const opponent = room.players.find(op => op.id !== p.id);
+        if (opponent) {
+          coinsChange = opponent.bet;
+        }
+      } else {
+        // Loser loses their bet
+        pointsEarned = p.batchCorrect * 3; // Some points for correct answers
+        coinsChange = -p.bet;
       }
-    } else if (p.batchCorrect > 0) {
-      // Some correct but didn't win
-      pointsEarned = p.batchCorrect * 3;
-      coinsChange = 0;
     } else {
-      // No correct answers - lose bet
-      coinsChange = -p.bet;
+      // No winner (tie or both zero)
+      pointsEarned = p.batchCorrect * 3;
+      // Keep bets in a tie
     }
 
     p.score += pointsEarned;
     p.coins += coinsChange;
+    if (p.coins < 0) p.coins = 0; // Floor at 0
 
     return {
       id: p.id,
@@ -1194,10 +1212,8 @@ function endRound(roomCode) {
   io.to(roomCode).emit('round-results', roundResults);
 
   if (roundResults.gameOver) {
-    const finalResults = getFinalResults(room);
-    setTimeout(() => {
-      io.to(roomCode).emit('game-over', finalResults);
-    }, 2000);
+    // Game over will be triggered when player clicks Next Round on final stats
+    room.gameOverPending = true;
   }
   // Don't auto-advance - wait for players to click Next Round
 }

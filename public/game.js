@@ -106,17 +106,26 @@ function updateScoreboard(element, players) {
 
 function startTimer(seconds) {
   clearInterval(timerInterval);
+  elements.timer.classList.remove('urgent');
 
   if (seconds === 0) {
-    elements.timer.innerHTML = '<span class="material-icons">all_inclusive</span>';
+    // No time limit - show stopwatch counting UP
     elements.timer.classList.add('no-limit');
+    let elapsed = 0;
+    elements.timer.textContent = '0:00';
+
+    timerInterval = setInterval(() => {
+      elapsed++;
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      elements.timer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    }, 1000);
     return;
   }
 
   elements.timer.classList.remove('no-limit');
   let remaining = seconds;
   elements.timer.textContent = remaining;
-  elements.timer.classList.remove('urgent');
 
   timerInterval = setInterval(() => {
     remaining--;
