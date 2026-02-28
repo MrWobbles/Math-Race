@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Math Race - Electrician Exam Practice</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="container">
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="screen active">
+      <h1>⚡ Math Race</h1>
+      <p class="subtitle">Electrician Exam Math Practice - Race your opponent!</p>
+
+      <div class="form-group">
+        <label for="player-name">Your Name</label>
+        <input type="text" id="player-name" placeholder="Enter your name" maxlength="20">
+      </div>
+
+      <div class="button-group">
+        <button id="create-room-btn" class="btn primary">Create Room</button>
+        <button id="show-join-btn" class="btn secondary">Join Room</button>
+      </div>
+
+      <div id="join-section" class="hidden">
+        <div class="form-group">
+          <label for="room-code">Room Code</label>
+          <input type="text" id="room-code" placeholder="Enter 6-letter code" maxlength="6">
+        </div>
+        <button id="join-room-btn" class="btn primary">Join</button>
+      </div>
+    </div>
+
+    <!-- Lobby Screen -->
+    <div id="lobby-screen" class="screen">
+      <h2>Room: <span id="display-room-code"></span></h2>
+      <p class="subtitle">Share this code with your opponent!</p>
+
+      <div class="players-list" id="lobby-players">
+        <!-- Players will be added here -->
+      </div>
+
+      <div id="waiting-message">
+        <div class="loader"></div>
+        <p>Waiting for opponent...</p>
+      </div>
+
+      <button id="start-game-btn" class="btn primary hidden">Start Game</button>
+    </div>
+
+    <!-- Betting Screen -->
+    <div id="betting-screen" class="screen">
+      <div class="game-header">
+        <div class="question-counter">Question <span id="bet-question-num">1</span>/<span
+            id="bet-total-questions">10</span></div>
+      </div>
+
+      <h2>Place Your Bet!</h2>
+
+      <div class="scoreboard" id="bet-scoreboard">
+        <!-- Scores shown here -->
+      </div>
+
+      <div class="betting-section">
+        <div class="coin-display">
+          <span class="coin-icon">🪙</span>
+          <span id="your-coins">100</span> coins
+        </div>
+
+        <div class="bet-controls">
+          <button class="bet-btn" data-amount="0">0</button>
+          <button class="bet-btn" data-amount="10">10</button>
+          <button class="bet-btn" data-amount="25">25</button>
+          <button class="bet-btn" data-amount="50">50</button>
+          <button class="bet-btn all-in" data-amount="all">ALL IN!</button>
+        </div>
+
+        <div class="custom-bet">
+          <input type="number" id="custom-bet" placeholder="Custom amount" min="0">
+          <button id="place-custom-bet" class="btn small">Bet</button>
+        </div>
+      </div>
+
+      <div id="bet-status" class="status-message"></div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen">
+      <div class="game-header">
+        <div class="question-counter">Question <span id="game-question-num">1</span>/<span
+            id="game-total-questions">10</span></div>
+        <div class="timer" id="timer">10</div>
+      </div>
+
+      <div class="scoreboard compact" id="game-scoreboard">
+        <!-- Live scores -->
+      </div>
+
+      <div class="problem-display">
+        <div class="problem" id="math-problem">?</div>
+      </div>
+
+      <div class="answer-section">
+        <input type="number" step="any" id="answer-input" placeholder="Your answer (decimals OK)" autofocus>
+        <button id="submit-answer-btn" class="btn primary">Submit</button>
+      </div>
+
+      <div id="answer-status" class="status-message"></div>
+    </div>
+
+    <!-- Results Screen -->
+    <div id="results-screen" class="screen">
+      <h2>Round Results</h2>
+
+      <div class="results-container" id="round-results">
+        <!-- Results displayed here -->
+      </div>
+
+      <div id="next-round-timer" class="countdown">Next round in <span>3</span>...</div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameover-screen" class="screen">
+      <div class="winner-announcement">
+        <h1 id="winner-title">🏆 Winner! 🏆</h1>
+        <div id="winner-name" class="winner-name"></div>
+      </div>
+
+      <div class="final-scores" id="final-scores">
+        <!-- Final scores -->
+      </div>
+
+      <button id="play-again-btn" class="btn primary">Play Again</button>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast" class="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game.js"></script>
+</body>
+
+</html>
