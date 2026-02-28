@@ -48,17 +48,70 @@
         <p>Waiting for opponent...</p>
       </div>
 
+      <!-- Game Settings (Host Only) -->
+      <div id="settings-panel" class="settings-panel hidden">
+        <h3>Game Settings</h3>
+
+        <div class="setting-group">
+          <label>Time Limit per Question</label>
+          <div class="setting-options">
+            <button class="setting-btn" data-setting="timeLimit" data-value="0">No Limit</button>
+            <button class="setting-btn active" data-setting="timeLimit" data-value="10">10s</button>
+            <button class="setting-btn" data-setting="timeLimit" data-value="15">15s</button>
+            <button class="setting-btn" data-setting="timeLimit" data-value="30">30s</button>
+            <button class="setting-btn" data-setting="timeLimit" data-value="60">60s</button>
+            <input type="number" id="custom-time" placeholder="Custom (sec)" min="0" max="300" class="setting-input">
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <label>Questions per Round (Batch Mode)</label>
+          <p class="setting-hint">Winner of most questions in batch takes the pot</p>
+          <div class="setting-options">
+            <button class="setting-btn active" data-setting="questionsPerBatch" data-value="1">1</button>
+            <button class="setting-btn" data-setting="questionsPerBatch" data-value="3">3</button>
+            <button class="setting-btn" data-setting="questionsPerBatch" data-value="5">5</button>
+            <button class="setting-btn" data-setting="questionsPerBatch" data-value="10">10</button>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <label>Question Focus</label>
+          <select id="category-select" class="setting-select">
+            <option value="">All Categories (Random)</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label>Total Questions</label>
+          <div class="setting-options">
+            <button class="setting-btn" data-setting="totalQuestions" data-value="5">5</button>
+            <button class="setting-btn active" data-setting="totalQuestions" data-value="10">10</button>
+            <button class="setting-btn" data-setting="totalQuestions" data-value="20">20</button>
+            <button class="setting-btn" data-setting="totalQuestions" data-value="30">30</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings display for non-host -->
+      <div id="settings-display" class="settings-display hidden">
+        <h4>Current Settings</h4>
+        <div id="settings-summary"></div>
+      </div>
+
       <button id="start-game-btn" class="btn primary hidden">Start Game</button>
     </div>
 
     <!-- Betting Screen -->
     <div id="betting-screen" class="screen">
       <div class="game-header">
-        <div class="question-counter">Question <span id="bet-question-num">1</span>/<span
+        <div class="question-counter">Round <span id="bet-question-num">1</span>/<span
             id="bet-total-questions">10</span></div>
       </div>
 
       <h2>Place Your Bet!</h2>
+      <p id="batch-info" class="batch-info hidden">This round: <span id="bet-batch-size">1</span> questions - most
+        correct wins!</p>
 
       <div class="scoreboard" id="bet-scoreboard">
         <!-- Scores shown here -->
@@ -90,9 +143,20 @@
     <!-- Game Screen -->
     <div id="game-screen" class="screen">
       <div class="game-header">
-        <div class="question-counter">Question <span id="game-question-num">1</span>/<span
-            id="game-total-questions">10</span></div>
-        <div class="timer" id="timer">10</div>
+        <div class="question-info">
+          <div class="question-counter">Question <span id="game-question-num">1</span>/<span
+              id="game-total-questions">10</span></div>
+          <div class="category-tag" id="question-category">Arithmetic</div>
+        </div>
+        <div class="timer-section">
+          <div class="timer" id="timer">10</div>
+          <div class="stopwatch" id="stopwatch">0.00s</div>
+        </div>
+      </div>
+
+      <!-- Batch Progress (shows in batch mode) -->
+      <div id="batch-progress" class="batch-progress hidden">
+        <span>Batch: <span id="batch-current">1</span>/<span id="batch-total">5</span></span>
       </div>
 
       <div class="scoreboard compact" id="game-scoreboard">
@@ -117,6 +181,15 @@
 
       <div class="results-container" id="round-results">
         <!-- Results displayed here -->
+      </div>
+
+      <!-- Detailed Stats -->
+      <div id="round-stats" class="round-stats">
+        <h3>Question Breakdown</h3>
+        <div id="stats-breakdown"></div>
+        <div class="stats-summary">
+          <div id="avg-time-display"></div>
+        </div>
       </div>
 
       <div id="next-round-timer" class="countdown">Next round in <span>3</span>...</div>

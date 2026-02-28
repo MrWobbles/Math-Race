@@ -319,27 +319,40 @@ const problemGenerators = {
   }
 };
 
-// Main problem generator
-function generateMathProblem(difficulty = 1) {
-  const categories = [
-    'arithmetic',
-    'fractions',
-    'decimals',
-    'percentages',
-    'ratios',
-    'exponents',
-    'squareRoots',
-    'linearEquations',
-    'wordProblems'
-  ];
+// Category display names
+const categoryNames = {
+  arithmetic: 'Basic Arithmetic',
+  fractions: 'Fractions',
+  decimals: 'Decimals',
+  percentages: 'Percentages',
+  ratios: 'Ratios & Proportions',
+  exponents: 'Exponents',
+  squareRoots: 'Square Roots',
+  linearEquations: 'Linear Equations',
+  wordProblems: 'Word Problems'
+};
 
-  const category = categories[randomInt(0, categories.length - 1)];
+const allCategories = Object.keys(categoryNames);
+
+// Main problem generator
+function generateMathProblem(difficulty = 1, focusCategory = null) {
+  let category;
+
+  if (focusCategory && problemGenerators[focusCategory]) {
+    category = focusCategory;
+  } else {
+    category = allCategories[randomInt(0, allCategories.length - 1)];
+  }
+
   const problem = problemGenerators[category]();
 
   // Round answer to avoid floating point issues
   problem.answer = typeof problem.answer === 'number'
     ? roundTo(problem.answer, 2)
     : problem.answer;
+
+  problem.category = category;
+  problem.categoryName = categoryNames[category];
 
   return problem;
 }
@@ -358,14 +371,28 @@ function createRoom(hostId, hostName) {
       bet: 0,
       currentAnswer: null,
       answerTime: null,
-      ready: false
+      ready: false,
+      batchAnswers: [],  // For batch mode: [{answer, time, questionIndex}]
+      batchCorrect: 0    // Count of correct answers in batch
     }],
     state: 'waiting', // waiting, betting, playing, results
     currentProblem: null,
     questionNumber: 0,
     totalQuestions: 10,
     roundStartTime: null,
-    difficulty: 1
+    difficulty: 1,
+    // New settings
+    settings: {
+      timeLimit: 10,        // 0 = no limit, or seconds per question
+      questionsPerBatch: 1, // 1-10 questions per betting round
+      focusCategory: null   // null = all categories, or specific category
+    },
+    // Batch mode tracking
+    batchProblems: [],      // Array of problems in current batch
+    currentBatchIndex: 0,   // Current question index in batch
+    questionStartTime: null, // When current question started
+    // Stats tracking
+    roundStats: []          // [{question, category, playerResults: [{id, answer, time, correct}]}]
   };
   rooms.set(roomCode, room);
   playerRooms.set(hostId, roomCode);
@@ -387,7 +414,9 @@ function joinRoom(roomCode, playerId, playerName) {
     bet: 0,
     currentAnswer: null,
     answerTime: null,
-    ready: false
+    ready: false,
+    batchAnswers: [],
+    batchCorrect: 0
   });
   playerRooms.set(playerId, roomCode);
   return room;
@@ -417,17 +446,46 @@ function placeBet(room, playerId, amount) {
   return { success: true, allReady };
 }
 
-// Start a new question round
+// Start a new question round (or batch)
 function startQuestionRound(room) {
   room.state = 'playing';
-  room.questionNumber++;
-  room.currentProblem = generateMathProblem(room.difficulty);
+
+  const batchSize = room.settings.questionsPerBatch;
+
+  // Generate batch of problems
+  room.batchProblems = [];
+  for (let i = 0; i < batchSize; i++) {
+    room.batchProblems.push(generateMathProblem(room.difficulty, room.settings.focusCategory));
+  }
+
+  room.currentBatchIndex = 0;
+  room.currentProblem = room.batchProblems[0];
   room.roundStartTime = Date.now();
+  room.questionStartTime = Date.now();
+
   room.players.forEach(p => {
     p.currentAnswer = null;
     p.answerTime = null;
+    p.batchAnswers = [];
+    p.batchCorrect = 0;
   });
+
   return room;
+}
+
+// Move to next question in batch
+function nextBatchQuestion(room) {
+  room.currentBatchIndex++;
+  if (room.currentBatchIndex < room.batchProblems.length) {
+    room.currentProblem = room.batchProblems[room.currentBatchIndex];
+    room.questionStartTime = Date.now();
+    room.players.forEach(p => {
+      p.currentAnswer = null;
+      p.answerTime = null;
+    });
+    return true;
+  }
+  return false;
 }
 
 // Submit an answer
@@ -435,8 +493,26 @@ function submitAnswer(room, playerId, answer) {
   const player = room.players.find(p => p.id === playerId);
   if (!player || player.currentAnswer !== null) return { error: 'Cannot submit answer' };
 
+  const answerTime = Date.now() - room.questionStartTime;
   player.currentAnswer = answer;
-  player.answerTime = Date.now() - room.roundStartTime;
+  player.answerTime = answerTime;
+
+  // Track in batch answers
+  const correct = answersMatch(answer, room.currentProblem.answer);
+  player.batchAnswers.push({
+    questionIndex: room.currentBatchIndex,
+    answer: answer,
+    time: answerTime,
+    correct: correct,
+    category: room.currentProblem.category,
+    categoryName: room.currentProblem.categoryName,
+    question: room.currentProblem.question,
+    correctAnswer: room.currentProblem.answer
+  });
+
+  if (correct) {
+    player.batchCorrect++;
+  }
 
   // Check if all players have answered
   const allAnswered = room.players.every(p => p.currentAnswer !== null);
@@ -452,9 +528,11 @@ function answersMatch(given, correct) {
   return Math.abs(givenRounded - correctRounded) < 0.01;
 }
 
-// Calculate round results
-function calculateRoundResults(room) {
-  const correctAnswer = room.currentProblem.answer;
+// Calculate results for single question (used in batch mode)
+function calculateQuestionResult(room) {
+  const problem = room.currentProblem;
+  const correctAnswer = problem.answer;
+
   let winner = null;
   let fastestTime = Infinity;
 
@@ -465,24 +543,132 @@ function calculateRoundResults(room) {
     }
   });
 
-  // Calculate score and coin changes
+  return {
+    question: problem.question,
+    correctAnswer: correctAnswer,
+    category: problem.category,
+    categoryName: problem.categoryName,
+    winner: winner ? { id: winner.id, name: winner.name, time: winner.answerTime } : null,
+    playerResults: room.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      answer: p.currentAnswer,
+      correct: answersMatch(p.currentAnswer, correctAnswer),
+      time: p.answerTime
+    }))
+  };
+}
+
+// Calculate batch/round results (determines pot winner and stats)
+function calculateRoundResults(room) {
+  const batchSize = room.settings.questionsPerBatch;
+
+  // For single question mode, use simple winner determination
+  if (batchSize === 1) {
+    const correctAnswer = room.currentProblem.answer;
+    let winner = null;
+    let fastestTime = Infinity;
+
+    room.players.forEach(p => {
+      if (answersMatch(p.currentAnswer, correctAnswer) && p.answerTime < fastestTime) {
+        fastestTime = p.answerTime;
+        winner = p;
+      }
+    });
+
+    // Calculate score and coin changes
+    const results = room.players.map(p => {
+      const correct = answersMatch(p.currentAnswer, correctAnswer);
+      let coinsChange = 0;
+      let pointsEarned = 0;
+
+      if (winner && p.id === winner.id) {
+        pointsEarned = 10 + Math.floor((5000 - Math.min(p.answerTime, 5000)) / 100);
+        const opponent = room.players.find(op => op.id !== p.id);
+        if (opponent) {
+          coinsChange = opponent.bet;
+        }
+      } else if (correct) {
+        pointsEarned = 5;
+      } else {
+        coinsChange = -p.bet;
+      }
+
+      p.score += pointsEarned;
+      p.coins += coinsChange;
+
+      return {
+        id: p.id,
+        name: p.name,
+        answer: p.currentAnswer,
+        correct,
+        time: p.answerTime,
+        pointsEarned,
+        coinsChange,
+        totalScore: p.score,
+        totalCoins: p.coins,
+        batchAnswers: p.batchAnswers
+      };
+    });
+
+    room.questionNumber++;
+
+    return {
+      correctAnswer,
+      category: room.currentProblem.category,
+      categoryName: room.currentProblem.categoryName,
+      question: room.currentProblem.question,
+      winner: winner ? { id: winner.id, name: winner.name } : null,
+      results,
+      questionNumber: room.questionNumber,
+      totalQuestions: room.totalQuestions,
+      gameOver: room.questionNumber >= room.totalQuestions,
+      batchMode: false
+    };
+  }
+
+  // Batch mode - winner is whoever got most correct (ties go to faster average)
+  let batchWinner = null;
+  let maxCorrect = 0;
+  let fastestAvg = Infinity;
+
+  room.players.forEach(p => {
+    const correctCount = p.batchCorrect;
+    const avgTime = p.batchAnswers.length > 0
+      ? p.batchAnswers.reduce((sum, a) => sum + a.time, 0) / p.batchAnswers.length
+      : Infinity;
+
+    if (correctCount > maxCorrect || (correctCount === maxCorrect && avgTime < fastestAvg)) {
+      maxCorrect = correctCount;
+      fastestAvg = avgTime;
+      batchWinner = p;
+    }
+  });
+
+  // Calculate scores and coins for batch
+  const totalPot = room.players.reduce((sum, p) => sum + p.bet, 0);
+
   const results = room.players.map(p => {
-    const correct = answersMatch(p.currentAnswer, correctAnswer);
     let coinsChange = 0;
     let pointsEarned = 0;
 
-    if (winner && p.id === winner.id) {
-      // Winner gets points and wins opponent's bet
-      pointsEarned = 10 + Math.floor((5000 - Math.min(p.answerTime, 5000)) / 100);
+    const avgTime = p.batchAnswers.length > 0
+      ? p.batchAnswers.reduce((sum, a) => sum + a.time, 0) / p.batchAnswers.length
+      : 0;
+
+    if (batchWinner && p.id === batchWinner.id) {
+      // Winner gets points per correct answer + pot
+      pointsEarned = p.batchCorrect * 10;
       const opponent = room.players.find(op => op.id !== p.id);
       if (opponent) {
         coinsChange = opponent.bet;
       }
-    } else if (correct) {
-      // Correct but not fastest - get some points, keep bet
-      pointsEarned = 5;
+    } else if (p.batchCorrect > 0) {
+      // Some correct but didn't win
+      pointsEarned = p.batchCorrect * 3;
+      coinsChange = 0;
     } else {
-      // Wrong answer - lose bet
+      // No correct answers - lose bet
       coinsChange = -p.bet;
     }
 
@@ -492,19 +678,42 @@ function calculateRoundResults(room) {
     return {
       id: p.id,
       name: p.name,
-      answer: p.currentAnswer,
-      correct,
-      time: p.answerTime,
+      batchCorrect: p.batchCorrect,
+      batchTotal: batchSize,
+      avgTime: Math.round(avgTime),
       pointsEarned,
       coinsChange,
       totalScore: p.score,
-      totalCoins: p.coins
+      totalCoins: p.coins,
+      batchAnswers: p.batchAnswers
     };
   });
 
+  room.questionNumber += batchSize;
+
+  // Compile batch stats
+  const batchStats = room.batchProblems.map((problem, idx) => ({
+    question: problem.question,
+    correctAnswer: problem.answer,
+    category: problem.category,
+    categoryName: problem.categoryName,
+    playerResults: room.players.map(p => {
+      const ans = p.batchAnswers.find(a => a.questionIndex === idx);
+      return {
+        id: p.id,
+        name: p.name,
+        answer: ans ? ans.answer : null,
+        time: ans ? ans.time : null,
+        correct: ans ? ans.correct : false
+      };
+    })
+  }));
+
   return {
-    correctAnswer,
-    winner: winner ? { id: winner.id, name: winner.name } : null,
+    batchMode: true,
+    batchSize: batchSize,
+    batchStats: batchStats,
+    winner: batchWinner ? { id: batchWinner.id, name: batchWinner.name, correct: maxCorrect } : null,
     results,
     questionNumber: room.questionNumber,
     totalQuestions: room.totalQuestions,
@@ -530,7 +739,12 @@ io.on('connection', (socket) => {
   socket.on('create-room', (playerName) => {
     const room = createRoom(socket.id, playerName);
     socket.join(room.code);
-    socket.emit('room-created', { roomCode: room.code, player: room.players[0] });
+    socket.emit('room-created', {
+      roomCode: room.code,
+      player: room.players[0],
+      settings: room.settings,
+      categories: categoryNames
+    });
   });
 
   // Join an existing room
@@ -542,8 +756,43 @@ io.on('connection', (socket) => {
     }
     socket.join(roomCode.toUpperCase());
     const newPlayer = result.players.find(p => p.id === socket.id);
-    socket.emit('room-joined', { roomCode: roomCode.toUpperCase(), player: newPlayer });
-    io.to(roomCode.toUpperCase()).emit('player-joined', { players: result.players });
+    socket.emit('room-joined', {
+      roomCode: roomCode.toUpperCase(),
+      player: newPlayer,
+      settings: result.settings,
+      categories: categoryNames
+    });
+    io.to(roomCode.toUpperCase()).emit('player-joined', {
+      players: result.players,
+      settings: result.settings
+    });
+  });
+
+  // Update room settings (host only)
+  socket.on('update-settings', (newSettings) => {
+    const roomCode = playerRooms.get(socket.id);
+    const room = rooms.get(roomCode);
+    if (!room || room.host !== socket.id) return;
+    if (room.state !== 'waiting') return;
+
+    // Validate and apply settings
+    if (typeof newSettings.timeLimit === 'number') {
+      room.settings.timeLimit = Math.max(0, Math.min(300, newSettings.timeLimit));
+    }
+    if (typeof newSettings.questionsPerBatch === 'number') {
+      room.settings.questionsPerBatch = Math.max(1, Math.min(10, newSettings.questionsPerBatch));
+    }
+    if (newSettings.focusCategory === null || categoryNames[newSettings.focusCategory]) {
+      room.settings.focusCategory = newSettings.focusCategory;
+    }
+    if (typeof newSettings.totalQuestions === 'number') {
+      room.totalQuestions = Math.max(5, Math.min(50, newSettings.totalQuestions));
+    }
+
+    io.to(roomCode).emit('settings-updated', {
+      settings: room.settings,
+      totalQuestions: room.totalQuestions
+    });
   });
 
   // Start the game
@@ -557,9 +806,12 @@ io.on('connection', (socket) => {
     }
 
     room.questionNumber = 0;
+    room.roundStats = [];
     room.players.forEach(p => {
       p.score = 0;
       p.coins = 100;
+      p.batchAnswers = [];
+      p.batchCorrect = 0;
     });
 
     startBettingRound(room);
@@ -571,7 +823,9 @@ io.on('connection', (socket) => {
         score: p.score
       })),
       questionNumber: room.questionNumber + 1,
-      totalQuestions: room.totalQuestions
+      totalQuestions: room.totalQuestions,
+      settings: room.settings,
+      batchSize: room.settings.questionsPerBatch
     });
   });
 
@@ -601,18 +855,7 @@ io.on('connection', (socket) => {
       // Start question after short delay
       setTimeout(() => {
         startQuestionRound(room);
-        io.to(roomCode).emit('question-start', {
-          question: room.currentProblem.question,
-          questionNumber: room.questionNumber,
-          totalQuestions: room.totalQuestions
-        });
-
-        // Auto-end round after 10 seconds
-        setTimeout(() => {
-          if (room.state === 'playing' && room.questionNumber === room.questionNumber) {
-            endRound(roomCode);
-          }
-        }, 10000);
+        emitQuestionStart(roomCode, room);
       }, 1000);
     }
   });
@@ -626,10 +869,13 @@ io.on('connection', (socket) => {
     const result = submitAnswer(room, socket.id, parseFloat(answer));
     if (result.error) return;
 
-    io.to(roomCode).emit('answer-submitted', { playerId: socket.id });
+    io.to(roomCode).emit('answer-submitted', {
+      playerId: socket.id,
+      questionIndex: room.currentBatchIndex
+    });
 
     if (result.allAnswered) {
-      endRound(roomCode);
+      handleAllAnswered(roomCode, room);
     }
   });
 
@@ -641,13 +887,19 @@ io.on('connection', (socket) => {
 
     room.state = 'waiting';
     room.questionNumber = 0;
+    room.roundStats = [];
     room.players.forEach(p => {
       p.score = 0;
       p.coins = 100;
       p.ready = false;
+      p.batchAnswers = [];
+      p.batchCorrect = 0;
     });
 
-    io.to(roomCode).emit('game-reset', { players: room.players });
+    io.to(roomCode).emit('game-reset', {
+      players: room.players,
+      settings: room.settings
+    });
   });
 
   // Handle disconnect
@@ -656,6 +908,10 @@ io.on('connection', (socket) => {
     if (roomCode) {
       const room = rooms.get(roomCode);
       if (room) {
+        // Clear any pending timers for this room
+        if (room.questionTimer) {
+          clearTimeout(room.questionTimer);
+        }
         io.to(roomCode).emit('player-left', { playerId: socket.id });
         room.players = room.players.filter(p => p.id !== socket.id);
         if (room.players.length === 0) {
@@ -671,12 +927,84 @@ io.on('connection', (socket) => {
   });
 });
 
+// Helper to emit question start
+function emitQuestionStart(roomCode, room) {
+  io.to(roomCode).emit('question-start', {
+    question: room.currentProblem.question,
+    category: room.currentProblem.category,
+    categoryName: room.currentProblem.categoryName,
+    questionNumber: room.questionNumber + room.currentBatchIndex + 1,
+    totalQuestions: room.totalQuestions,
+    batchIndex: room.currentBatchIndex,
+    batchSize: room.settings.questionsPerBatch,
+    timeLimit: room.settings.timeLimit
+  });
+
+  // Set up auto-end timer if time limit is set
+  if (room.settings.timeLimit > 0) {
+    if (room.questionTimer) clearTimeout(room.questionTimer);
+    room.questionTimer = setTimeout(() => {
+      if (room.state === 'playing') {
+        handleAllAnswered(roomCode, room);
+      }
+    }, room.settings.timeLimit * 1000);
+  }
+}
+
+// Handle when all players answered (or timeout)
+function handleAllAnswered(roomCode, room) {
+  if (room.questionTimer) {
+    clearTimeout(room.questionTimer);
+    room.questionTimer = null;
+  }
+
+  // Store question result for stats
+  const questionResult = calculateQuestionResult(room);
+  room.roundStats.push(questionResult);
+
+  // Check if more questions in batch
+  if (room.settings.questionsPerBatch > 1 && room.currentBatchIndex < room.batchProblems.length - 1) {
+    // Send quick result for this question
+    io.to(roomCode).emit('question-result', {
+      questionIndex: room.currentBatchIndex,
+      correctAnswer: room.currentProblem.answer,
+      category: room.currentProblem.categoryName,
+      question: room.currentProblem.question,
+      playerResults: room.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        answer: p.currentAnswer,
+        correct: answersMatch(p.currentAnswer, room.currentProblem.answer),
+        time: p.answerTime
+      })),
+      batchProgress: room.currentBatchIndex + 1,
+      batchTotal: room.batchProblems.length
+    });
+
+    // Move to next question in batch after brief delay
+    setTimeout(() => {
+      nextBatchQuestion(room);
+      emitQuestionStart(roomCode, room);
+    }, 1500);
+  } else {
+    // End of batch/round
+    endRound(roomCode);
+  }
+}
+
 function endRound(roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return;
 
+  if (room.questionTimer) {
+    clearTimeout(room.questionTimer);
+    room.questionTimer = null;
+  }
+
   const roundResults = calculateRoundResults(room);
+  roundResults.roundStats = room.roundStats;
   room.state = 'results';
+  room.roundStats = [];
 
   io.to(roomCode).emit('round-results', roundResults);
 
@@ -684,7 +1012,7 @@ function endRound(roomCode) {
     const finalResults = getFinalResults(room);
     setTimeout(() => {
       io.to(roomCode).emit('game-over', finalResults);
-    }, 3000);
+    }, 4000);
   } else {
     // Start next betting round after delay
     setTimeout(() => {
@@ -697,9 +1025,11 @@ function endRound(roomCode) {
           score: p.score
         })),
         questionNumber: room.questionNumber + 1,
-        totalQuestions: room.totalQuestions
+        totalQuestions: room.totalQuestions,
+        settings: room.settings,
+        batchSize: room.settings.questionsPerBatch
       });
-    }, 3000);
+    }, 4000);
   }
 }
 
