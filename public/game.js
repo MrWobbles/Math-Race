@@ -547,9 +547,10 @@ socket.on('question-start', ({ question, questionNumber, totalQuestions, timeLim
     }
   }
 
-  startTimer(timeLimit || 10);
+  const effectiveTimeLimit = timeLimit !== undefined && timeLimit !== null ? timeLimit : 10;
+  startTimer(effectiveTimeLimit);
   startStopwatch();
-  startBgTimer(timeLimit || 10);
+  startBgTimer(effectiveTimeLimit);
   showScreen('game');
 });
 
