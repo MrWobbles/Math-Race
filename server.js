@@ -406,7 +406,7 @@ function addCpuOpponent(room) {
   const cpuId = 'CPU_' + uuidv4().substring(0, 8);
   room.players.push({
     id: cpuId,
-    name: '🤖 CPU',
+    name: 'CPU',
     score: 0,
     coins: 100,
     bet: 0,

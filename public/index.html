@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Math Race - Electrician Exam Practice</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -12,7 +13,7 @@
   <div class="container">
     <!-- Welcome Screen -->
     <div id="welcome-screen" class="screen active">
-      <h1>⚡ Math Race</h1>
+      <h1><span class="material-icons title-icon">bolt</span> Math Race</h1>
       <p class="subtitle">Electrician Exam Math Practice - Race your opponent!</p>
 
       <div class="form-group">
@@ -122,7 +123,7 @@
 
       <div class="betting-section">
         <div class="coin-display">
-          <span class="coin-icon">🪙</span>
+          <span class="material-icons coin-icon">monetization_on</span>
           <span id="your-coins">100</span> coins
         </div>
 
@@ -187,8 +188,8 @@
       </div>
 
       <!-- Detailed Stats -->
-      <div id="round-stats" class="round-stats">
-        <h3>Question Breakdown</h3>
+      <div id="round-stats" class="round-stats hidden">
+        <h3>Your Question Breakdown</h3>
         <div id="stats-breakdown"></div>
         <div class="stats-summary">
           <div id="avg-time-display"></div>
@@ -201,7 +202,8 @@
     <!-- Game Over Screen -->
     <div id="gameover-screen" class="screen">
       <div class="winner-announcement">
-        <h1 id="winner-title">🏆 Winner! 🏆</h1>
+        <h1 id="winner-title"><span class="material-icons trophy-icon">emoji_events</span> Winner! <span
+            class="material-icons trophy-icon">emoji_events</span></h1>
         <div id="winner-name" class="winner-name"></div>
       </div>
 

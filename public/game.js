@@ -94,8 +94,8 @@ function updateScoreboard(element, players) {
         <span class="score-name">${p.name}${p.id === myId ? ' (You)' : ''}</span>
       </div>
       <div class="score-values">
-        <span class="score-points">⭐ ${p.score || 0}</span>
-        <span class="score-coins">🪙 ${p.coins}</span>
+        <span class="score-points"><span class="material-icons">star</span> ${p.score || 0}</span>
+        <span class="score-coins"><span class="material-icons">monetization_on</span> ${p.coins}</span>
       </div>
     </div>
   `).join('');
@@ -105,7 +105,7 @@ function startTimer(seconds) {
   clearInterval(timerInterval);
 
   if (seconds === 0) {
-    elements.timer.textContent = '∞';
+    elements.timer.innerHTML = '<span class="material-icons">all_inclusive</span>';
     elements.timer.classList.add('no-limit');
     return;
   }
@@ -159,10 +159,10 @@ function updateSettingsSummary() {
   const batchText = gameSettings.questionsPerBatch === 1 ? '1 question' : `${gameSettings.questionsPerBatch} questions`;
 
   elements.settingsSummary.innerHTML = `
-    <div>⏱️ ${timeText}</div>
-    <div>📚 ${categoryText}</div>
-    <div>📋 ${batchText} per round</div>
-    <div>🎯 ${gameSettings.totalQuestions} total questions</div>
+    <div><span class="material-icons">timer</span> ${timeText}</div>
+    <div><span class="material-icons">category</span> ${categoryText}</div>
+    <div><span class="material-icons">list_alt</span> ${batchText} per round</div>
+    <div><span class="material-icons">track_changes</span> ${gameSettings.totalQuestions} total questions</div>
   `;
 }
 
@@ -528,7 +528,7 @@ socket.on('round-results', (results) => {
             ${q.answers.map(a => `
               <span class="batch-answer ${a.correct ? 'correct' : 'wrong'}">
                 ${a.name}: ${a.answer !== null ? a.answer : 'No answer'}
-                ${a.correct ? '✓' : '✗'}
+                <span class="material-icons ${a.correct ? 'correct' : 'wrong'}">${a.correct ? 'check' : 'close'}</span>
                 ${a.time ? ` (${(a.time / 1000).toFixed(2)}s)` : ''}
               </span>
             `).join('')}
@@ -553,7 +553,7 @@ socket.on('round-results', (results) => {
             </div>
             <div class="result-change">
               <div class="points-change ${r.pointsEarned > 0 ? 'positive' : ''}">${r.pointsEarned > 0 ? '+' : ''}${r.pointsEarned} pts</div>
-              <div class="coins-change">${r.coinsChange >= 0 ? '+' : ''}${r.coinsChange} 🪙</div>
+              <div class="coins-change">${r.coinsChange >= 0 ? '+' : ''}${r.coinsChange} <span class="material-icons">monetization_on</span></div>
             </div>
           </div>
         `).join('')}
@@ -572,13 +572,13 @@ socket.on('round-results', (results) => {
             <div class="result-name">${r.name}${r.id === myId ? ' (You)' : ''}</div>
             <div class="result-stats">
               Answer: ${r.answer !== null ? r.answer : 'No answer'}
-              ${r.correct ? '✓' : '✗'}
+              <span class="material-icons ${r.correct ? 'correct' : 'wrong'}">${r.correct ? 'check' : 'close'}</span>
               ${r.time ? ` • ${(r.time / 1000).toFixed(2)}s` : ''}
             </div>
           </div>
           <div class="result-change">
             <div class="points-change ${r.pointsEarned > 0 ? 'positive' : ''}">${r.pointsEarned > 0 ? '+' : ''}${r.pointsEarned} pts</div>
-            <div class="coins-change">${r.coinsChange >= 0 ? '+' : ''}${r.coinsChange} 🪙</div>
+            <div class="coins-change">${r.coinsChange >= 0 ? '+' : ''}${r.coinsChange} <span class="material-icons">monetization_on</span></div>
           </div>
         </div>
       `).join('')}
@@ -586,6 +586,88 @@ socket.on('round-results', (results) => {
   }
 
   elements.roundResults.innerHTML = resultsHtml;
+
+  // Build detailed stats breakdown for the player
+  if (elements.statsBreakdown && elements.roundStats) {
+    const myResult = results.results.find(r => r.id === myId);
+
+    if (myResult && myResult.batchAnswers && myResult.batchAnswers.length > 0) {
+      // Show stats for all answers in this round
+      let statsHtml = '<div class="stats-questions">';
+
+      myResult.batchAnswers.forEach((ans, idx) => {
+        statsHtml += `
+          <div class="stat-question ${ans.correct ? 'correct' : 'wrong'}">
+            <div class="stat-q-header">
+              <span class="stat-q-num">Q${idx + 1}</span>
+              <span class="stat-q-category">${ans.categoryName || categories[ans.category] || ans.category}</span>
+              <span class="material-icons ${ans.correct ? 'correct' : 'wrong'}">${ans.correct ? 'check' : 'close'}</span>
+            </div>
+            <div class="stat-q-details">
+              <div class="stat-q-problem">${ans.question} = ${ans.correctAnswer}</div>
+              <div class="stat-q-answer">Your answer: <strong>${ans.answer !== null ? ans.answer : 'No answer'}</strong></div>
+              <div class="stat-q-time"><span class="material-icons">timer</span> ${ans.time ? (ans.time / 1000).toFixed(2) + 's' : 'N/A'}</div>
+            </div>
+          </div>
+        `;
+      });
+
+      statsHtml += '</div>';
+      elements.statsBreakdown.innerHTML = statsHtml;
+
+      // Calculate and show average time
+      const answeredQuestions = myResult.batchAnswers.filter(a => a.time);
+      const avgTime = answeredQuestions.length > 0
+        ? answeredQuestions.reduce((sum, a) => sum + a.time, 0) / answeredQuestions.length
+        : 0;
+      const correctCount = myResult.batchAnswers.filter(a => a.correct).length;
+
+      if (elements.avgTimeDisplay) {
+        elements.avgTimeDisplay.innerHTML = `
+          <div class="stats-summary-row">
+            <span><span class="material-icons">speed</span> Avg Time:</span>
+            <strong>${avgTime > 0 ? (avgTime / 1000).toFixed(2) + 's' : 'N/A'}</strong>
+          </div>
+          <div class="stats-summary-row">
+            <span><span class="material-icons">check_circle</span> Accuracy:</span>
+            <strong>${correctCount}/${myResult.batchAnswers.length} (${Math.round(correctCount / myResult.batchAnswers.length * 100)}%)</strong>
+          </div>
+        `;
+      }
+
+      elements.roundStats.classList.remove('hidden');
+    } else {
+      // Single question - show simple stats
+      if (myResult) {
+        elements.statsBreakdown.innerHTML = `
+          <div class="stat-question ${myResult.correct ? 'correct' : 'wrong'}">
+            <div class="stat-q-header">
+              <span class="stat-q-category">${results.categoryName || categories[results.category] || results.category}</span>
+              <span class="material-icons ${myResult.correct ? 'correct' : 'wrong'}">${myResult.correct ? 'check' : 'close'}</span>
+            </div>
+            <div class="stat-q-details">
+              <div class="stat-q-problem">${results.question} = ${results.correctAnswer}</div>
+              <div class="stat-q-answer">Your answer: <strong>${myResult.answer !== null ? myResult.answer : 'No answer'}</strong></div>
+              <div class="stat-q-time"><span class="material-icons">timer</span> ${myResult.time ? (myResult.time / 1000).toFixed(2) + 's' : 'N/A'}</div>
+            </div>
+          </div>
+        `;
+
+        if (elements.avgTimeDisplay) {
+          elements.avgTimeDisplay.innerHTML = `
+            <div class="stats-summary-row">
+              <span><span class="material-icons">speed</span> Response Time:</span>
+              <strong>${myResult.time ? (myResult.time / 1000).toFixed(2) + 's' : 'N/A'}</strong>
+            </div>
+          `;
+        }
+
+        elements.roundStats.classList.remove('hidden');
+      } else {
+        elements.roundStats.classList.add('hidden');
+      }
+    }
+  }
 
   if (results.winner) {
     const winnerResult = results.results.find(r => r.id === results.winner.id);
@@ -611,13 +693,15 @@ socket.on('game-over', (results) => {
   const winner = results.winner;
   const isWinner = winner.id === myId;
 
-  elements.winnerTitle.textContent = isWinner ? '🏆 You Won! 🏆' : '🏆 Winner! 🏆';
+  elements.winnerTitle.innerHTML = isWinner
+    ? '<span class="material-icons trophy-icon">emoji_events</span> You Won! <span class="material-icons trophy-icon">emoji_events</span>'
+    : '<span class="material-icons trophy-icon">emoji_events</span> Winner! <span class="material-icons trophy-icon">emoji_events</span>';
   elements.winnerName.textContent = winner.name;
 
   elements.finalScores.innerHTML = results.players.map((p, i) => `
         <div class="final-score-item">
             <div class="final-player-info">
-                <span class="final-rank">${i === 0 ? '🥇' : '🥈'}</span>
+                <span class="final-rank"><span class="material-icons ${i === 0 ? 'gold' : 'silver'}">emoji_events</span></span>
                 <span class="final-player-name">${p.name}${p.id === myId ? ' (You)' : ''}</span>
             </div>
             <div class="final-score">${p.score} pts</div>
