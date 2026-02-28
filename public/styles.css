@@ -598,6 +598,20 @@ input:focus {
   padding: 15px;
 }
 
+#next-round-btn {
+  margin-top: 20px;
+  font-size: 1.1rem;
+  padding: 15px 30px;
+}
+
+#next-round-status {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-top: 10px;
+  min-height: 1.5em;
+}
+
 /* Game Over */
 .winner-announcement {
   text-align: center;

@@ -65,6 +65,8 @@ const elements = {
 
   roundResults: document.getElementById('round-results'),
   nextRoundTimer: document.getElementById('next-round-timer'),
+  nextRoundBtn: document.getElementById('next-round-btn'),
+  nextRoundStatus: document.getElementById('next-round-status'),
   roundStats: document.getElementById('round-stats'),
   statsBreakdown: document.getElementById('stats-breakdown'),
   avgTimeDisplay: document.getElementById('avg-time-display'),
@@ -358,6 +360,13 @@ function submitAnswer() {
 // Play again
 document.getElementById('play-again-btn').addEventListener('click', () => {
   socket.emit('play-again');
+});
+
+// Next round button
+elements.nextRoundBtn.addEventListener('click', () => {
+  elements.nextRoundBtn.disabled = true;
+  elements.nextRoundStatus.textContent = 'Ready! Waiting for opponent...';
+  socket.emit('ready-next-round');
 });
 
 // Socket event handlers
@@ -679,13 +688,20 @@ socket.on('round-results', (results) => {
 
   showScreen('results');
 
-  // Countdown to next round
-  let countdown = 3;
-  elements.nextRoundTimer.innerHTML = `Next round in <span>${countdown}</span>...`;
-  elements.nextRoundTimer.classList.remove('hidden');
-
+  // Show Next Round button
   if (results.gameOver) {
-    elements.nextRoundTimer.innerHTML = 'Game Over! Final results coming...';
+    elements.nextRoundBtn.classList.add('hidden');
+    elements.nextRoundStatus.textContent = 'Game Over! Final results coming...';
+  } else {
+    elements.nextRoundBtn.classList.remove('hidden');
+    elements.nextRoundBtn.disabled = false;
+    elements.nextRoundStatus.textContent = '';
+  }
+});
+
+socket.on('player-ready-next', ({ playerId, readyPlayers }) => {
+  if (playerId !== myId && readyPlayers.length === 1) {
+    elements.nextRoundStatus.textContent = `${readyPlayers[0]} is ready`;
   }
 });
 

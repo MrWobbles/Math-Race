@@ -1042,6 +1042,41 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Ready for next round
+  socket.on('ready-next-round', () => {
+    const roomCode = playerRooms.get(socket.id);
+    const room = rooms.get(roomCode);
+    if (!room || room.state !== 'results') return;
+
+    const player = room.players.find(p => p.id === socket.id);
+    if (player) {
+      player.readyForNext = true;
+    }
+
+    // Notify all players of ready status
+    io.to(roomCode).emit('player-ready-next', {
+      playerId: socket.id,
+      readyPlayers: room.players.filter(p => p.readyForNext).map(p => p.name)
+    });
+
+    // Auto-ready CPU
+    if (room.hasCpu) {
+      const cpu = room.players.find(p => p.isCpu);
+      if (cpu && !cpu.readyForNext) {
+        setTimeout(() => {
+          cpu.readyForNext = true;
+          io.to(roomCode).emit('player-ready-next', {
+            playerId: cpu.id,
+            readyPlayers: room.players.filter(p => p.readyForNext).map(p => p.name)
+          });
+          checkAllReadyForNext(roomCode, room);
+        }, 500 + Math.random() * 1000);
+      }
+    }
+
+    checkAllReadyForNext(roomCode, room);
+  });
+
   // Handle disconnect
   socket.on('disconnect', () => {
     const roomCode = playerRooms.get(socket.id);
@@ -1151,56 +1186,65 @@ function endRound(roomCode) {
   room.state = 'results';
   room.roundStats = [];
 
+  // Reset ready state for next round
+  room.players.forEach(p => {
+    p.readyForNext = false;
+  });
+
   io.to(roomCode).emit('round-results', roundResults);
 
   if (roundResults.gameOver) {
     const finalResults = getFinalResults(room);
     setTimeout(() => {
       io.to(roomCode).emit('game-over', finalResults);
-    }, 4000);
-  } else {
-    // Start next betting round after delay
-    setTimeout(() => {
-      startBettingRound(room);
-      io.to(roomCode).emit('betting-phase', {
-        players: room.players.map(p => ({
-          id: p.id,
-          name: p.name,
-          coins: p.coins,
-          score: p.score
-        })),
-        questionNumber: room.questionNumber + 1,
-        totalQuestions: room.totalQuestions,
-        settings: room.settings,
-        batchSize: room.settings.questionsPerBatch
-      });
+    }, 2000);
+  }
+  // Don't auto-advance - wait for players to click Next Round
+}
 
-      // Auto-bet for CPU
-      if (room.hasCpu) {
-        setTimeout(() => {
-          const cpuBet = cpuPlaceBet(room);
-          if (cpuBet !== undefined) {
-            const cpu = room.players.find(p => p.isCpu);
-            io.to(roomCode).emit('bet-placed', {
-              playerId: cpu.id,
-              players: room.players.map(p => ({
-                id: p.id,
-                name: p.name,
-                ready: p.ready,
-                coins: p.coins
-              }))
-            });
+// Check if all players are ready for next round
+function checkAllReadyForNext(roomCode, room) {
+  const allReady = room.players.every(p => p.readyForNext);
+  if (allReady) {
+    startBettingRound(room);
+    io.to(roomCode).emit('betting-phase', {
+      players: room.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        coins: p.coins,
+        score: p.score
+      })),
+      questionNumber: room.questionNumber + 1,
+      totalQuestions: room.totalQuestions,
+      settings: room.settings,
+      batchSize: room.settings.questionsPerBatch
+    });
 
-            if (room.players.every(p => p.ready)) {
-              setTimeout(() => {
-                startQuestionRound(room);
-                emitQuestionStart(roomCode, room);
-              }, 1000);
-            }
+    // Auto-bet for CPU
+    if (room.hasCpu) {
+      setTimeout(() => {
+        const cpuBet = cpuPlaceBet(room);
+        if (cpuBet !== undefined) {
+          const cpu = room.players.find(p => p.isCpu);
+          io.to(roomCode).emit('bet-placed', {
+            playerId: cpu.id,
+            players: room.players.map(p => ({
+              id: p.id,
+              name: p.name,
+              ready: p.ready,
+              coins: p.coins
+            }))
+          });
+
+          if (room.players.every(p => p.ready)) {
+            setTimeout(() => {
+              startQuestionRound(room);
+              emitQuestionStart(roomCode, room);
+            }, 1000);
           }
-        }, 500 + Math.random() * 1000);
-      }
-    }, 4000);
+        }
+      }, 500 + Math.random() * 1000);
+    }
   }
 }
 
