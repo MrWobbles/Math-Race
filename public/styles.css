@@ -611,6 +611,38 @@ input:focus {
   color: var(--secondary);
 }
 
+.single-question-result {
+  background: var(--bg-dark);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.single-question-result .question-header,
+.batch-question-result .batch-question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.single-question-result .question-text,
+.batch-question-result .question-text {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.single-question-result .question-category,
+.batch-question-result .question-category {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
 .countdown {
   text-align: center;
   color: var(--text-secondary);

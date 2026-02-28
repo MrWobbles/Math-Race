@@ -616,11 +616,13 @@ socket.on('round-results', (results) => {
       </div>
     `;
   } else {
-    // Single question mode
+    // Single question mode - show question with answer
     resultsHtml = `
-      <div class="correct-answer-display">
-        <div class="label">Correct Answer</div>
-        <div class="answer">${results.correctAnswer}</div>
+      <div class="single-question-result">
+        <div class="question-header">
+          <span class="question-text">${results.question} = ${results.correctAnswer}</span>
+          <span class="question-category">${categories[results.category] || results.category || ''}</span>
+        </div>
       </div>
       ${results.results.map(r => `
         <div class="result-item ${r.correct && results.winner && r.id === results.winner.id ? 'winner' : ''} ${!r.correct ? 'wrong' : ''}">
