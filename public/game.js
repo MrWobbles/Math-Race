@@ -522,7 +522,7 @@ socket.on('bet-placed', ({ playerId, players }) => {
 socket.on('question-start', ({ question, questionNumber, totalQuestions, timeLimit, batchIndex, batchTotal, category }) => {
   elements.gameQuestionNum.textContent = questionNumber;
   elements.gameTotalQuestions.textContent = totalQuestions;
-  elements.mathProblem.textContent = question + ' = ?';
+  elements.mathProblem.textContent = question;
   elements.answerInput.value = '';
   elements.answerInput.disabled = false;
   document.getElementById('submit-answer-btn').disabled = false;
