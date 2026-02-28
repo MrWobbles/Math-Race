@@ -488,7 +488,9 @@ function updateLobbyPlayers(players) {
     if (addCpuBtn && isHost) addCpuBtn.classList.remove('hidden');
   } else {
     elements.waitingMessage.classList.add('hidden');
-    elements.startGameBtn.classList.remove('hidden');
+    if (isHost) {
+      elements.startGameBtn.classList.remove('hidden');
+    }
     if (addCpuBtn) addCpuBtn.classList.add('hidden');
   }
 }
