@@ -242,40 +242,42 @@ elements.startGameBtn.addEventListener('click', () => {
 });
 
 // Settings handlers
-document.querySelectorAll('.time-btn').forEach(btn => {
+document.querySelectorAll('.setting-btn[data-setting="timeLimit"]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.setting-btn[data-setting="timeLimit"]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    const time = btn.dataset.time;
-    if (time === 'custom') {
-      elements.customTimeInput.style.display = 'block';
-      gameSettings.timeLimit = parseInt(elements.customTimeInput.querySelector('input').value) || 30;
-    } else {
-      elements.customTimeInput.style.display = 'none';
-      gameSettings.timeLimit = parseInt(time);
-    }
-
+    const time = parseInt(btn.dataset.value);
+    gameSettings.timeLimit = time;
     socket.emit('update-settings', gameSettings);
   });
 });
 
-if (elements.customTimeInput) {
-  const input = elements.customTimeInput.querySelector('input');
-  if (input) {
-    input.addEventListener('change', () => {
-      gameSettings.timeLimit = Math.max(5, Math.min(300, parseInt(input.value) || 30));
-      input.value = gameSettings.timeLimit;
-      socket.emit('update-settings', gameSettings);
-    });
-  }
+const customTimeInput = document.getElementById('custom-time');
+if (customTimeInput) {
+  customTimeInput.addEventListener('change', () => {
+    document.querySelectorAll('.setting-btn[data-setting="timeLimit"]').forEach(b => b.classList.remove('active'));
+    const value = Math.max(0, Math.min(300, parseInt(customTimeInput.value) || 0));
+    customTimeInput.value = value;
+    gameSettings.timeLimit = value;
+    socket.emit('update-settings', gameSettings);
+  });
 }
 
-document.querySelectorAll('.batch-btn').forEach(btn => {
+document.querySelectorAll('.setting-btn[data-setting="questionsPerBatch"]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.batch-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.setting-btn[data-setting="questionsPerBatch"]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    gameSettings.questionsPerBatch = parseInt(btn.dataset.batch);
+    gameSettings.questionsPerBatch = parseInt(btn.dataset.value);
+    socket.emit('update-settings', gameSettings);
+  });
+});
+
+document.querySelectorAll('.setting-btn[data-setting="totalQuestions"]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.setting-btn[data-setting="totalQuestions"]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gameSettings.totalQuestions = parseInt(btn.dataset.value);
     socket.emit('update-settings', gameSettings);
   });
 });
@@ -283,14 +285,6 @@ document.querySelectorAll('.batch-btn').forEach(btn => {
 if (elements.categorySelect) {
   elements.categorySelect.addEventListener('change', () => {
     gameSettings.focusCategory = elements.categorySelect.value || null;
-    socket.emit('update-settings', gameSettings);
-  });
-}
-
-if (elements.totalQuestionsInput) {
-  elements.totalQuestionsInput.addEventListener('change', () => {
-    gameSettings.totalQuestions = Math.max(5, Math.min(50, parseInt(elements.totalQuestionsInput.value) || 20));
-    elements.totalQuestionsInput.value = gameSettings.totalQuestions;
     socket.emit('update-settings', gameSettings);
   });
 }
@@ -367,12 +361,12 @@ socket.on('room-created', ({ roomCode, player, settings }) => {
 
   // Show settings panel for host
   if (elements.settingsPanel) {
-    elements.settingsPanel.style.display = 'block';
+    elements.settingsPanel.classList.remove('hidden');
   }
   if (elements.settingsDisplay) {
-    elements.settingsDisplay.style.display = 'none';
+    elements.settingsDisplay.classList.add('hidden');
   }
-
+  
   populateCategories();
   showScreen('lobby');
 });
@@ -383,23 +377,13 @@ socket.on('room-joined', ({ roomCode, player, settings }) => {
   isHost = false;
   gameSettings = settings || gameSettings;
   elements.displayRoomCode.textContent = roomCode;
-
+  
   // Hide settings panel for non-host, show summary
   if (elements.settingsPanel) {
-    elements.settingsPanel.style.display = 'none';
+    elements.settingsPanel.classList.add('hidden');
   }
   if (elements.settingsDisplay) {
-    elements.settingsDisplay.style.display = 'block';
-    updateSettingsSummary();
-  }
-
-  showScreen('lobby');
-});
-
-socket.on('player-joined', ({ players, settings }) => {
-  updateLobbyPlayers(players);
-  if (settings) {
-    gameSettings = settings;
+    elements.settingsDisplay.classList.remove('hidden');
     updateSettingsSummary();
   }
   if (players.length === 2) {
