@@ -399,6 +399,80 @@ function createRoom(hostId, hostName) {
   return room;
 }
 
+// Add CPU opponent to room
+function addCpuOpponent(room) {
+  if (room.players.length >= 2) return { error: 'Room is full' };
+
+  const cpuId = 'CPU_' + uuidv4().substring(0, 8);
+  room.players.push({
+    id: cpuId,
+    name: '🤖 CPU',
+    score: 0,
+    coins: 100,
+    bet: 0,
+    currentAnswer: null,
+    answerTime: null,
+    ready: false,
+    batchAnswers: [],
+    batchCorrect: 0,
+    isCpu: true
+  });
+  room.hasCpu = true;
+  return room;
+}
+
+// CPU places a bet (random amount between 0 and 50% of coins)
+function cpuPlaceBet(room) {
+  const cpu = room.players.find(p => p.isCpu);
+  if (!cpu || room.state !== 'betting') return;
+
+  const maxBet = Math.floor(cpu.coins * 0.5);
+  const betAmount = Math.floor(Math.random() * (maxBet + 1));
+  cpu.bet = Math.min(betAmount, cpu.coins);
+  cpu.ready = true;
+  return cpu.bet;
+}
+
+// CPU answers a question (80% accuracy, random delay 1-4 seconds)
+function cpuAnswerQuestion(room, io, roomCode) {
+  const cpu = room.players.find(p => p.isCpu);
+  if (!cpu || room.state !== 'playing') return;
+
+  const problem = room.batchProblems[room.currentBatchIndex];
+  if (!problem) return;
+
+  // Random delay between 1-4 seconds
+  const delay = 1000 + Math.random() * 3000;
+
+  setTimeout(() => {
+    if (room.state !== 'playing') return;
+
+    // 80% chance of correct answer
+    const isCorrect = Math.random() < 0.8;
+    let answer;
+
+    if (isCorrect) {
+      answer = problem.answer;
+    } else {
+      // Wrong answer: offset by 10-50%
+      const offset = problem.answer * (0.1 + Math.random() * 0.4);
+      answer = Math.round((problem.answer + (Math.random() > 0.5 ? offset : -offset)) * 100) / 100;
+    }
+
+    const result = submitAnswer(room, cpu.id, answer);
+    if (result.error) return;
+
+    io.to(roomCode).emit('answer-submitted', {
+      playerId: cpu.id,
+      questionIndex: room.currentBatchIndex
+    });
+
+    if (result.allAnswered) {
+      handleAllAnswered(roomCode, room);
+    }
+  }, delay);
+}
+
 // Join an existing room
 function joinRoom(roomCode, playerId, playerName) {
   const room = rooms.get(roomCode);
@@ -768,6 +842,45 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Add CPU opponent to room
+  socket.on('add-cpu', () => {
+    const roomCode = playerRooms.get(socket.id);
+    const room = rooms.get(roomCode);
+    if (!room || room.host !== socket.id) return;
+    if (room.state !== 'waiting') return;
+
+    const result = addCpuOpponent(room);
+    if (result.error) {
+      socket.emit('error', result.error);
+      return;
+    }
+
+    io.to(roomCode).emit('player-joined', {
+      players: room.players,
+      settings: room.settings
+    });
+  });
+
+  // Create room and immediately add CPU
+  socket.on('play-vs-cpu', (playerName) => {
+    const room = createRoom(socket.id, playerName);
+    socket.join(room.code);
+    addCpuOpponent(room);
+
+    socket.emit('room-created', {
+      roomCode: room.code,
+      player: room.players[0],
+      settings: room.settings,
+      categories: categoryNames
+    });
+
+    // Immediately notify about CPU joining
+    io.to(room.code).emit('player-joined', {
+      players: room.players,
+      settings: room.settings
+    });
+  });
+
   // Update room settings (host only)
   socket.on('update-settings', (newSettings) => {
     const roomCode = playerRooms.get(socket.id);
@@ -827,6 +940,33 @@ io.on('connection', (socket) => {
       settings: room.settings,
       batchSize: room.settings.questionsPerBatch
     });
+
+    // Auto-bet for CPU after a short delay
+    if (room.hasCpu) {
+      setTimeout(() => {
+        const cpuBet = cpuPlaceBet(room);
+        if (cpuBet !== undefined) {
+          const cpu = room.players.find(p => p.isCpu);
+          io.to(roomCode).emit('bet-placed', {
+            playerId: cpu.id,
+            players: room.players.map(p => ({
+              id: p.id,
+              name: p.name,
+              ready: p.ready,
+              coins: p.coins
+            }))
+          });
+
+          // Check if all ready
+          if (room.players.every(p => p.ready)) {
+            setTimeout(() => {
+              startQuestionRound(room);
+              emitQuestionStart(roomCode, room);
+            }, 1000);
+          }
+        }
+      }, 500 + Math.random() * 1000);
+    }
   });
 
   // Place a bet
@@ -949,6 +1089,11 @@ function emitQuestionStart(roomCode, room) {
       }
     }, room.settings.timeLimit * 1000);
   }
+
+  // Trigger CPU answer
+  if (room.hasCpu) {
+    cpuAnswerQuestion(room, io, roomCode);
+  }
 }
 
 // Handle when all players answered (or timeout)
@@ -1029,6 +1174,32 @@ function endRound(roomCode) {
         settings: room.settings,
         batchSize: room.settings.questionsPerBatch
       });
+
+      // Auto-bet for CPU
+      if (room.hasCpu) {
+        setTimeout(() => {
+          const cpuBet = cpuPlaceBet(room);
+          if (cpuBet !== undefined) {
+            const cpu = room.players.find(p => p.isCpu);
+            io.to(roomCode).emit('bet-placed', {
+              playerId: cpu.id,
+              players: room.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                ready: p.ready,
+                coins: p.coins
+              }))
+            });
+
+            if (room.players.every(p => p.ready)) {
+              setTimeout(() => {
+                startQuestionRound(room);
+                emitQuestionStart(roomCode, room);
+              }, 1000);
+            }
+          }
+        }, 500 + Math.random() * 1000);
+      }
     }, 4000);
   }
 }

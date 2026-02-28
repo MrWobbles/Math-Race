@@ -208,6 +208,20 @@ document.getElementById('create-room-btn').addEventListener('click', () => {
   socket.emit('create-room', name);
 });
 
+document.getElementById('play-cpu-btn').addEventListener('click', () => {
+  const name = elements.playerName.value.trim();
+  if (!name) {
+    showToast('Please enter your name', true);
+    return;
+  }
+  myName = name;
+  socket.emit('play-vs-cpu', name);
+});
+
+document.getElementById('add-cpu-btn').addEventListener('click', () => {
+  socket.emit('add-cpu');
+});
+
 document.getElementById('show-join-btn').addEventListener('click', () => {
   document.getElementById('join-section').classList.toggle('hidden');
 });
@@ -408,9 +422,15 @@ function updateLobbyPlayers(players) {
         </div>
     `).join('');
 
+  const addCpuBtn = document.getElementById('add-cpu-btn');
   if (players.length < 2) {
     elements.waitingMessage.classList.remove('hidden');
     elements.startGameBtn.classList.add('hidden');
+    if (addCpuBtn && isHost) addCpuBtn.classList.remove('hidden');
+  } else {
+    elements.waitingMessage.classList.add('hidden');
+    elements.startGameBtn.classList.remove('hidden');
+    if (addCpuBtn) addCpuBtn.classList.add('hidden');
   }
 }
 
