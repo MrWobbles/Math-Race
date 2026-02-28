@@ -406,6 +406,14 @@ socket.on('room-joined', ({ roomCode, player, settings, categories: serverCatego
   showScreen('lobby');
 });
 
+socket.on('player-joined', ({ players, settings }) => {
+  updateLobbyPlayers(players);
+  if (settings) {
+    gameSettings = settings;
+    updateSettingsSummary();
+  }
+});
+
 socket.on('settings-updated', (settings) => {
   gameSettings = settings;
   updateSettingsSummary();
