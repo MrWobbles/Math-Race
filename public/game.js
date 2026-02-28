@@ -351,11 +351,12 @@ socket.on('connect', () => {
   myId = socket.id;
 });
 
-socket.on('room-created', ({ roomCode, player, settings }) => {
+socket.on('room-created', ({ roomCode, player, settings, categories: serverCategories }) => {
   currentRoom = roomCode;
   myId = player.id;
   isHost = true;
   gameSettings = settings || gameSettings;
+  categories = serverCategories || {};
   elements.displayRoomCode.textContent = roomCode;
   updateLobbyPlayers([player]);
 
@@ -366,18 +367,19 @@ socket.on('room-created', ({ roomCode, player, settings }) => {
   if (elements.settingsDisplay) {
     elements.settingsDisplay.classList.add('hidden');
   }
-  
+
   populateCategories();
   showScreen('lobby');
 });
 
-socket.on('room-joined', ({ roomCode, player, settings }) => {
+socket.on('room-joined', ({ roomCode, player, settings, categories: serverCategories }) => {
   currentRoom = roomCode;
   myId = player.id;
   isHost = false;
   gameSettings = settings || gameSettings;
+  categories = serverCategories || {};
   elements.displayRoomCode.textContent = roomCode;
-  
+
   // Hide settings panel for non-host, show summary
   if (elements.settingsPanel) {
     elements.settingsPanel.classList.add('hidden');
@@ -386,10 +388,8 @@ socket.on('room-joined', ({ roomCode, player, settings }) => {
     elements.settingsDisplay.classList.remove('hidden');
     updateSettingsSummary();
   }
-  if (players.length === 2) {
-    elements.waitingMessage.classList.add('hidden');
-    elements.startGameBtn.classList.remove('hidden');
-  }
+
+  showScreen('lobby');
 });
 
 socket.on('settings-updated', (settings) => {
