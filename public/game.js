@@ -12,7 +12,7 @@ let isHost = false;
 let gameSettings = {
   timeLimit: 10,
   questionsPerBatch: 1,
-  focusCategory: null,
+  focusCategories: [],  // Empty array = all categories
   totalQuestions: 10
 };
 let categories = {};
@@ -80,7 +80,6 @@ const elements = {
   settingsPanel: document.getElementById('settings-panel'),
   settingsDisplay: document.getElementById('settings-display'),
   settingsSummary: document.getElementById('settings-summary'),
-  categorySelect: document.getElementById('category-select'),
   customTime: document.getElementById('custom-time'),
 
   betQuestionNum: document.getElementById('bet-question-num'),
@@ -252,7 +251,14 @@ function updateSettingsSummary() {
   if (!elements.settingsSummary) return;
 
   const timeText = gameSettings.timeLimit === 0 ? 'No time limit' : `${gameSettings.timeLimit}s per question`;
-  const categoryText = gameSettings.focusCategory ? categories[gameSettings.focusCategory] : 'All categories';
+  let categoryText;
+  if (!gameSettings.focusCategories || gameSettings.focusCategories.length === 0) {
+    categoryText = 'All categories';
+  } else if (gameSettings.focusCategories.length === 1) {
+    categoryText = categories[gameSettings.focusCategories[0]] || gameSettings.focusCategories[0];
+  } else {
+    categoryText = `${gameSettings.focusCategories.length} categories`;
+  }
   const batchText = gameSettings.questionsPerBatch === 1 ? '1 question' : `${gameSettings.questionsPerBatch} questions`;
 
   elements.settingsSummary.innerHTML = `
@@ -264,15 +270,57 @@ function updateSettingsSummary() {
 }
 
 function populateCategories() {
-  const select = elements.categorySelect;
-  if (!select) return;
+  const container = document.getElementById('category-checkboxes');
+  if (!container) return;
 
-  select.innerHTML = '<option value="">All Categories (Random)</option>';
+  container.innerHTML = '';
   Object.entries(categories).forEach(([key, name]) => {
-    const option = document.createElement('option');
-    option.value = key;
-    option.textContent = name;
-    select.appendChild(option);
+    const label = document.createElement('label');
+    label.className = 'category-checkbox-item';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = key;
+    checkbox.dataset.category = key;
+    
+    // Check if this category is in the current selection
+    if (gameSettings.focusCategories && gameSettings.focusCategories.includes(key)) {
+      checkbox.checked = true;
+      label.classList.add('selected');
+    }
+    
+    checkbox.addEventListener('change', () => {
+      label.classList.toggle('selected', checkbox.checked);
+      updateSelectedCategories();
+    });
+    
+    const span = document.createElement('span');
+    span.textContent = name;
+    
+    label.appendChild(checkbox);
+    label.appendChild(span);
+    container.appendChild(label);
+  });
+}
+
+function updateSelectedCategories() {
+  const container = document.getElementById('category-checkboxes');
+  if (!container) return;
+  
+  const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
+  gameSettings.focusCategories = Array.from(checkboxes).map(cb => cb.value);
+  socket.emit('update-settings', gameSettings);
+}
+
+function updateCategoryCheckboxes() {
+  const container = document.getElementById('category-checkboxes');
+  if (!container) return;
+  
+  const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    const isSelected = gameSettings.focusCategories && gameSettings.focusCategories.includes(cb.value);
+    cb.checked = isSelected;
+    cb.closest('.category-checkbox-item')?.classList.toggle('selected', isSelected);
   });
 }
 
@@ -392,13 +440,6 @@ document.querySelectorAll('.setting-btn[data-setting="totalQuestions"]').forEach
     socket.emit('update-settings', gameSettings);
   });
 });
-
-if (elements.categorySelect) {
-  elements.categorySelect.addEventListener('change', () => {
-    gameSettings.focusCategory = elements.categorySelect.value || null;
-    socket.emit('update-settings', gameSettings);
-  });
-}
 
 // Betting handlers
 document.querySelectorAll('.bet-btn').forEach(btn => {
@@ -625,14 +666,21 @@ socket.on('rejoin-failed', ({ reason }) => {
 socket.on('player-joined', ({ players, settings }) => {
   updateLobbyPlayers(players);
   if (settings) {
-    gameSettings = settings;
+    // Merge settings, preserving totalQuestions
+    gameSettings = { ...gameSettings, ...settings };
     updateSettingsSummary();
   }
 });
 
-socket.on('settings-updated', (settings) => {
-  gameSettings = settings;
+socket.on('settings-updated', (data) => {
+  if (data.settings) {
+    gameSettings = { ...data.settings, totalQuestions: data.totalQuestions || gameSettings.totalQuestions };
+  }
   updateSettingsSummary();
+  // Update checkbox state to reflect new settings
+  if (isHost) {
+    updateCategoryCheckboxes();
+  }
 });
 
 let lastWinnerId = null;

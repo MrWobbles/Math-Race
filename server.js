@@ -512,12 +512,19 @@ const categoryNames = {
 const allCategories = Object.keys(categoryNames);
 
 // Main problem generator
-function generateMathProblem(difficulty = 1, focusCategory = null) {
+function generateMathProblem(difficulty = 1, focusCategories = []) {
   let category;
 
-  if (focusCategory && problemGenerators[focusCategory]) {
-    category = focusCategory;
+  // If focusCategories is an array with items, pick randomly from them
+  if (Array.isArray(focusCategories) && focusCategories.length > 0) {
+    const validCategories = focusCategories.filter(c => problemGenerators[c]);
+    if (validCategories.length > 0) {
+      category = validCategories[randomInt(0, validCategories.length - 1)];
+    } else {
+      category = allCategories[randomInt(0, allCategories.length - 1)];
+    }
   } else {
+    // Empty array or null = all categories
     category = allCategories[randomInt(0, allCategories.length - 1)];
   }
 
@@ -560,9 +567,9 @@ function createRoom(hostId, hostName) {
     difficulty: 1,
     // New settings
     settings: {
-      timeLimit: 10,        // 0 = no limit, or seconds per question
-      questionsPerBatch: 1, // 1-10 questions per betting round
-      focusCategory: null   // null = all categories, or specific category
+      timeLimit: 10,         // 0 = no limit, or seconds per question
+      questionsPerBatch: 1,  // 1-10 questions per betting round
+      focusCategories: []    // Empty array = all categories, or array of category keys
     },
     // Batch mode tracking
     batchProblems: [],      // Array of problems in current batch
@@ -781,7 +788,7 @@ function startQuestionRound(room) {
   // Generate batch of problems
   room.batchProblems = [];
   for (let i = 0; i < batchSize; i++) {
-    room.batchProblems.push(generateMathProblem(room.difficulty, room.settings.focusCategory));
+    room.batchProblems.push(generateMathProblem(room.difficulty, room.settings.focusCategories));
   }
 
   room.currentBatchIndex = 0;
@@ -1268,8 +1275,10 @@ io.on('connection', (socket) => {
     if (typeof newSettings.questionsPerBatch === 'number') {
       room.settings.questionsPerBatch = Math.max(1, Math.min(10, newSettings.questionsPerBatch));
     }
-    if (newSettings.focusCategory === null || categoryNames[newSettings.focusCategory]) {
-      room.settings.focusCategory = newSettings.focusCategory;
+    // Handle focusCategories as an array
+    if (Array.isArray(newSettings.focusCategories)) {
+      // Filter to only valid category names
+      room.settings.focusCategories = newSettings.focusCategories.filter(c => categoryNames[c]);
     }
     if (typeof newSettings.totalQuestions === 'number') {
       room.totalQuestions = Math.max(5, Math.min(50, newSettings.totalQuestions));
