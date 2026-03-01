@@ -673,6 +673,81 @@ function joinRoom(roomCode, playerId, playerName) {
   return room;
 }
 
+// Rejoin an existing room (after disconnect)
+function rejoinRoom(roomCode, newSocketId, playerName, wasHost) {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room no longer exists' };
+
+  // Look for a disconnected player with the same name
+  const disconnectedPlayer = room.players.find(p =>
+    p.name === playerName && p.disconnected
+  );
+
+  if (disconnectedPlayer) {
+    // Clear the disconnect timeout
+    if (disconnectedPlayer.disconnectTimeout) {
+      clearTimeout(disconnectedPlayer.disconnectTimeout);
+      disconnectedPlayer.disconnectTimeout = null;
+    }
+
+    // Update the player's socket ID
+    const oldId = disconnectedPlayer.id;
+    disconnectedPlayer.id = newSocketId;
+    disconnectedPlayer.disconnected = false;
+
+    // Update host if this was the host
+    if (room.host === oldId) {
+      room.host = newSocketId;
+    }
+
+    // Update playerRooms mapping
+    playerRooms.delete(oldId);
+    playerRooms.set(newSocketId, roomCode);
+
+    return {
+      success: true,
+      room,
+      player: disconnectedPlayer,
+      isHost: room.host === newSocketId
+    };
+  }
+
+  // No disconnected player found - check if room has space
+  if (room.players.length >= 2) {
+    return { error: 'Room is full' };
+  }
+
+  // Room has space but no matching disconnected player
+  // They can join as a new player if in waiting state
+  if (room.state !== 'waiting') {
+    return { error: 'Game in progress, cannot join as new player' };
+  }
+
+  // Add as new player
+  const newPlayer = {
+    id: newSocketId,
+    name: playerName,
+    score: 0,
+    coins: 100,
+    bet: 0,
+    currentAnswer: null,
+    answerTime: null,
+    ready: false,
+    batchAnswers: [],
+    batchCorrect: 0
+  };
+  room.players.push(newPlayer);
+  playerRooms.set(newSocketId, roomCode);
+
+  return {
+    success: true,
+    room,
+    player: newPlayer,
+    isHost: room.host === newSocketId,
+    isNewPlayer: true
+  };
+}
+
 // Start betting round
 function startBettingRound(room) {
   room.state = 'betting';
@@ -713,6 +788,7 @@ function startQuestionRound(room) {
   room.currentProblem = room.batchProblems[0];
   room.roundStartTime = Date.now();
   room.questionStartTime = Date.now();
+  room.currentQuestionHandled = false; // Guard against double-processing
 
   room.players.forEach(p => {
     p.currentAnswer = null;
@@ -731,6 +807,7 @@ function nextBatchQuestion(room) {
   if (room.currentBatchIndex < room.batchProblems.length) {
     room.currentProblem = room.batchProblems[room.currentBatchIndex];
     room.questionStartTime = Date.now();
+    room.currentQuestionHandled = false; // Reset guard for new question
     room.players.forEach(p => {
       p.currentAnswer = null;
       p.answerTime = null;
@@ -772,9 +849,39 @@ function submitAnswer(room, playerId, answer) {
   return { success: true, allAnswered };
 }
 
+// Parse answer string - handles fractions (e.g., "1/2", "3/4") and decimals
+function parseAnswer(answerStr) {
+  if (answerStr === null || answerStr === undefined) return NaN;
+
+  const str = String(answerStr).trim();
+
+  // Check for fraction format (e.g., "1/2", "-3/4", "5/8")
+  const fractionMatch = str.match(/^(-?\d+)\s*\/\s*(\d+)$/);
+  if (fractionMatch) {
+    const numerator = parseInt(fractionMatch[1], 10);
+    const denominator = parseInt(fractionMatch[2], 10);
+    if (denominator === 0) return NaN;
+    return numerator / denominator;
+  }
+
+  // Check for mixed number format (e.g., "1 1/2", "2 3/4")
+  const mixedMatch = str.match(/^(-?\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (mixedMatch) {
+    const whole = parseInt(mixedMatch[1], 10);
+    const numerator = parseInt(mixedMatch[2], 10);
+    const denominator = parseInt(mixedMatch[3], 10);
+    if (denominator === 0) return NaN;
+    const sign = whole < 0 ? -1 : 1;
+    return whole + sign * (numerator / denominator);
+  }
+
+  // Otherwise parse as decimal
+  return parseFloat(str);
+}
+
 // Helper to compare answers (handles floating point)
 function answersMatch(given, correct) {
-  if (given === null || given === undefined) return false;
+  if (given === null || given === undefined || isNaN(given)) return false;
   // Round both to 2 decimal places for comparison
   const givenRounded = Math.round(given * 100) / 100;
   const correctRounded = Math.round(correct * 100) / 100;
@@ -1046,6 +1153,68 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Rejoin a room after disconnect/refresh
+  socket.on('rejoin-room', ({ roomCode, playerName, wasHost }) => {
+    const result = rejoinRoom(roomCode.toUpperCase(), socket.id, playerName, wasHost);
+    if (result.error) {
+      socket.emit('rejoin-failed', { reason: result.error });
+      return;
+    }
+
+    socket.join(roomCode.toUpperCase());
+    const room = result.room;
+    const player = result.player;
+
+    // Build game state for client to restore UI
+    const gameState = {
+      questionNumber: room.questionNumber,
+      totalQuestions: room.totalQuestions,
+      currentProblem: room.currentProblem ? {
+        question: room.currentProblem.question,
+        category: room.currentProblem.category,
+        categoryName: room.currentProblem.categoryName
+      } : null,
+      questionStartTime: room.questionStartTime,
+      timeLimit: room.settings.timeLimit
+    };
+
+    socket.emit('rejoin-success', {
+      roomCode: roomCode.toUpperCase(),
+      player: {
+        id: player.id,
+        name: player.name,
+        score: player.score,
+        coins: player.coins,
+        isHost: result.isHost,
+        hasAnswered: player.currentAnswer !== null
+      },
+      players: room.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        score: p.score,
+        coins: p.coins
+      })),
+      settings: room.settings,
+      categories: categoryNames,
+      state: room.state,
+      gameState
+    });
+
+    // Notify other players that this player reconnected
+    socket.to(roomCode.toUpperCase()).emit('player-reconnected', {
+      playerId: player.id,
+      playerName: player.name
+    });
+
+    // If this was a new player joining (not reconnecting), notify everyone
+    if (result.isNewPlayer) {
+      io.to(roomCode.toUpperCase()).emit('player-joined', {
+        players: room.players,
+        settings: room.settings
+      });
+    }
+  });
+
   // Add CPU opponent to room
   socket.on('add-cpu', () => {
     const roomCode = playerRooms.get(socket.id);
@@ -1210,7 +1379,13 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode);
     if (!room || room.state !== 'playing') return;
 
-    const result = submitAnswer(room, socket.id, parseFloat(answer));
+    const parsedAnswer = parseAnswer(answer);
+    if (isNaN(parsedAnswer)) {
+      socket.emit('error', 'Invalid answer format');
+      return;
+    }
+
+    const result = submitAnswer(room, socket.id, parsedAnswer);
     if (result.error) return;
 
     io.to(roomCode).emit('answer-submitted', {
@@ -1337,20 +1512,68 @@ io.on('connection', (socket) => {
     if (roomCode) {
       const room = rooms.get(roomCode);
       if (room) {
-        // Clear any pending timers for this room
-        if (room.questionTimer) {
-          clearTimeout(room.questionTimer);
-        }
-        io.to(roomCode).emit('player-left', { playerId: socket.id });
-        room.players = room.players.filter(p => p.id !== socket.id);
-        if (room.players.length === 0) {
-          rooms.delete(roomCode);
+        const player = room.players.find(p => p.id === socket.id);
+
+        // For CPU players or if room only has CPU left, remove immediately
+        if (player && !player.isCpu) {
+          // Mark player as disconnected instead of removing immediately
+          player.disconnected = true;
+
+          // Notify other players
+          io.to(roomCode).emit('player-disconnected', {
+            playerId: socket.id,
+            playerName: player.name
+          });
+
+          // Set timeout to remove player if they don't reconnect
+          player.disconnectTimeout = setTimeout(() => {
+            const currentRoom = rooms.get(roomCode);
+            if (currentRoom) {
+              const playerIndex = currentRoom.players.findIndex(p => p.id === socket.id);
+              if (playerIndex !== -1 && currentRoom.players[playerIndex].disconnected) {
+                // Clear any pending timers for this room
+                if (currentRoom.questionTimer) {
+                  clearTimeout(currentRoom.questionTimer);
+                }
+
+                io.to(roomCode).emit('player-left', { playerId: socket.id });
+                currentRoom.players.splice(playerIndex, 1);
+
+                if (currentRoom.players.length === 0) {
+                  rooms.delete(roomCode);
+                } else if (currentRoom.players.every(p => p.isCpu)) {
+                  // Only CPU left, delete room
+                  rooms.delete(roomCode);
+                } else {
+                  // Assign new host if needed
+                  const humanPlayer = currentRoom.players.find(p => !p.isCpu);
+                  if (humanPlayer) {
+                    currentRoom.host = humanPlayer.id;
+                  }
+                  currentRoom.state = 'waiting';
+                }
+              }
+            }
+            playerRooms.delete(socket.id);
+          }, 60000); // 60 second timeout
         } else {
-          room.host = room.players[0].id;
-          room.state = 'waiting';
+          // CPU or no player found - remove immediately
+          if (room.questionTimer) {
+            clearTimeout(room.questionTimer);
+          }
+          io.to(roomCode).emit('player-left', { playerId: socket.id });
+          room.players = room.players.filter(p => p.id !== socket.id);
+          if (room.players.length === 0) {
+            rooms.delete(roomCode);
+          } else {
+            room.host = room.players[0].id;
+            room.state = 'waiting';
+          }
+          playerRooms.delete(socket.id);
         }
+      } else {
+        playerRooms.delete(socket.id);
       }
-      playerRooms.delete(socket.id);
     }
     console.log('Player disconnected:', socket.id);
   });
@@ -1388,6 +1611,17 @@ function emitQuestionStart(roomCode, room) {
 
 // Handle when all players answered (or timeout)
 function handleAllAnswered(roomCode, room) {
+  // Guard against double-processing of the same question
+  if (room.currentQuestionHandled) {
+    return;
+  }
+  room.currentQuestionHandled = true;
+
+  // Verify room is still in playing state
+  if (room.state !== 'playing') {
+    return;
+  }
+
   if (room.questionTimer) {
     clearTimeout(room.questionTimer);
     room.questionTimer = null;

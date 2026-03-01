@@ -17,6 +17,48 @@ let gameSettings = {
 };
 let categories = {};
 let questionStartTime = null;
+let isRejoining = false;
+
+// Session storage helpers
+const SESSION_KEY = 'mathRaceSession';
+
+function saveSession(roomCode, playerName, wasHost) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      roomCode,
+      playerName,
+      wasHost,
+      timestamp: Date.now()
+    }));
+  } catch (e) {
+    console.warn('Could not save session to localStorage:', e);
+  }
+}
+
+function loadSession() {
+  try {
+    const data = localStorage.getItem(SESSION_KEY);
+    if (!data) return null;
+    const session = JSON.parse(data);
+    // Session expires after 10 minutes
+    if (Date.now() - session.timestamp > 10 * 60 * 1000) {
+      clearSession();
+      return null;
+    }
+    return session;
+  } catch (e) {
+    console.warn('Could not load session from localStorage:', e);
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch (e) {
+    console.warn('Could not clear session from localStorage:', e);
+  }
+}
 
 // DOM Elements
 const screens = {
@@ -444,16 +486,32 @@ elements.nextRoundBtn.addEventListener('click', () => {
 // Socket event handlers
 socket.on('connect', () => {
   myId = socket.id;
+
+  // Try to rejoin existing session
+  const session = loadSession();
+  if (session && !isRejoining) {
+    isRejoining = true;
+    myName = session.playerName;
+    socket.emit('rejoin-room', {
+      roomCode: session.roomCode,
+      playerName: session.playerName,
+      wasHost: session.wasHost
+    });
+  }
 });
 
 socket.on('room-created', ({ roomCode, player, settings, categories: serverCategories }) => {
   currentRoom = roomCode;
   myId = player.id;
   isHost = true;
+  isRejoining = false;
   gameSettings = settings || gameSettings;
   categories = serverCategories || {};
   elements.displayRoomCode.textContent = roomCode;
   updateLobbyPlayers([player]);
+
+  // Save session
+  saveSession(roomCode, player.name, true);
 
   // Show settings panel for host
   if (elements.settingsPanel) {
@@ -471,9 +529,13 @@ socket.on('room-joined', ({ roomCode, player, settings, categories: serverCatego
   currentRoom = roomCode;
   myId = player.id;
   isHost = false;
+  isRejoining = false;
   gameSettings = settings || gameSettings;
   categories = serverCategories || {};
   elements.displayRoomCode.textContent = roomCode;
+
+  // Save session
+  saveSession(roomCode, player.name, false);
 
   // Hide settings panel for non-host, show summary
   if (elements.settingsPanel) {
@@ -485,6 +547,79 @@ socket.on('room-joined', ({ roomCode, player, settings, categories: serverCatego
   }
 
   showScreen('lobby');
+});
+
+// Handle successful rejoin
+socket.on('rejoin-success', ({ roomCode, player, players, settings, categories: serverCategories, state, gameState }) => {
+  currentRoom = roomCode;
+  myId = player.id;
+  myName = player.name;
+  myCoins = player.coins;
+  isHost = player.isHost;
+  isRejoining = false;
+  gameSettings = settings || gameSettings;
+  categories = serverCategories || {};
+  elements.displayRoomCode.textContent = roomCode;
+
+  // Update session timestamp
+  saveSession(roomCode, player.name, player.isHost);
+
+  showToast('Reconnected to game!');
+
+  // Restore to appropriate screen based on game state
+  if (state === 'waiting') {
+    updateLobbyPlayers(players);
+    if (elements.settingsPanel) {
+      elements.settingsPanel.classList.toggle('hidden', !isHost);
+    }
+    if (elements.settingsDisplay) {
+      elements.settingsDisplay.classList.toggle('hidden', isHost);
+      updateSettingsSummary();
+    }
+    populateCategories();
+    showScreen('lobby');
+  } else if (state === 'betting') {
+    updateScoreboard(elements.betScoreboard, players);
+    elements.yourCoins.textContent = player.coins;
+    if (gameState) {
+      elements.betQuestionNum.textContent = gameState.questionNumber + 1;
+      elements.betTotalQuestions.textContent = gameState.totalQuestions;
+    }
+    showScreen('betting');
+  } else if (state === 'playing') {
+    updateScoreboard(elements.gameScoreboard, players);
+    if (gameState && gameState.currentProblem) {
+      elements.mathProblem.textContent = gameState.currentProblem.question;
+      elements.gameQuestionNum.textContent = gameState.questionNumber + 1;
+      elements.gameTotalQuestions.textContent = gameState.totalQuestions;
+      if (gameState.timeLimit > 0) {
+        const elapsed = Math.floor((Date.now() - gameState.questionStartTime) / 1000);
+        const remaining = Math.max(0, gameState.timeLimit - elapsed);
+        startTimer(remaining);
+      } else {
+        startTimer(0);
+      }
+    }
+    elements.answerInput.value = '';
+    elements.answerInput.disabled = player.hasAnswered;
+    document.getElementById('submit-answer-btn').disabled = player.hasAnswered;
+    if (player.hasAnswered) {
+      elements.answerStatus.textContent = 'Answer submitted! Waiting for opponent...';
+    }
+    showScreen('game');
+  } else if (state === 'results') {
+    showScreen('results');
+  }
+});
+
+// Handle failed rejoin
+socket.on('rejoin-failed', ({ reason }) => {
+  isRejoining = false;
+  clearSession();
+  // Stay on welcome screen, user can create/join a new room
+  if (reason) {
+    showToast(reason, true);
+  }
 });
 
 socket.on('player-joined', ({ players, settings }) => {
@@ -604,6 +739,34 @@ socket.on('question-start', ({ question, questionNumber, totalQuestions, timeLim
 socket.on('answer-submitted', ({ playerId }) => {
   if (playerId !== myId) {
     showToast('Opponent submitted their answer!');
+  }
+});
+
+// Handle individual question results in batch mode
+socket.on('question-result', ({ questionIndex, correctAnswer, question, playerResults, batchProgress, batchTotal }) => {
+  // Update UI to show this question's result briefly
+  elements.answerStatus.textContent = `Question ${batchProgress}/${batchTotal} complete! Next question coming...`;
+
+  // Show quick feedback
+  const myResult = playerResults.find(r => r.id === myId);
+  if (myResult) {
+    if (myResult.correct) {
+      showToast('Correct! ✓');
+    } else {
+      showToast(`Incorrect. Answer was ${correctAnswer}`, true);
+    }
+  }
+
+  // Reset input for next question
+  elements.answerInput.value = '';
+  elements.answerInput.disabled = false;
+  document.getElementById('submit-answer-btn').disabled = false;
+
+  // Reset hint state
+  if (elements.hintBtn && elements.hintDisplay) {
+    elements.hintBtn.classList.remove('hidden');
+    elements.hintDisplay.classList.add('hidden');
+    elements.hintDisplay.textContent = '';
   }
 });
 
@@ -858,6 +1021,14 @@ socket.on('player-left', ({ playerId }) => {
   elements.startGameBtn.classList.add('hidden');
 });
 
+socket.on('player-disconnected', ({ playerId, playerName }) => {
+  showToast(`${playerName} disconnected. Waiting for reconnect...`, true);
+});
+
+socket.on('player-reconnected', ({ playerId, playerName }) => {
+  showToast(`${playerName} reconnected!`);
+});
+
 socket.on('error', (message) => {
   showToast(message, true);
 });
@@ -867,3 +1038,9 @@ socket.on('update-coins', (coins) => {
   myCoins = coins;
   elements.yourCoins.textContent = myCoins;
 });
+
+// Initialize: pre-fill player name from saved session if available
+const savedSession = loadSession();
+if (savedSession && savedSession.playerName) {
+  elements.playerName.value = savedSession.playerName;
+}
