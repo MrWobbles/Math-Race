@@ -7,18 +7,22 @@
 /* Fullscreen background timer */
 .bg-timer {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 0%;
-  height: 100vh;
-  background: rgba(255, 255, 255, 0.15);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 15vw;
+  font-weight: 700;
+  font-family: "Courier New", monospace;
+  color: rgba(255, 255, 255, 0.12);
   z-index: 0;
   pointer-events: none;
-  transition: none;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+  display: none;
 }
 
 .bg-timer.active {
-  transition: width linear;
+  display: block;
 }
 
 :root {
@@ -285,6 +289,13 @@ input:focus {
   background: var(--primary);
 }
 
+.crown-icon {
+  color: gold;
+  font-size: 1.2rem;
+  vertical-align: middle;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
 .player-status {
   color: var(--text-secondary);
   font-size: 0.9rem;
@@ -490,6 +501,39 @@ input:focus {
   letter-spacing: 8px;
 }
 
+/* Hint System */
+.hint-container {
+  margin-top: 20px;
+}
+
+.hint-btn {
+  background: var(--warning);
+  color: var(--bg-dark);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  padding: 10px 20px;
+}
+
+.hint-btn:hover {
+  background: #d97706;
+}
+
+.hint-btn .material-icons {
+  font-size: 1.2rem;
+}
+
+.hint-display {
+  margin-top: 15px;
+  padding: 15px 20px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--warning);
+  border-radius: 10px;
+  font-size: 1.1rem;
+  color: var(--warning);
+}
+
 /* Answer Section */
 .answer-section {
   display: flex;
@@ -643,6 +687,39 @@ input:focus {
   border-radius: 12px;
 }
 
+.solution-work {
+  margin-top: 12px;
+  padding: 12px 15px;
+  background: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid var(--warning);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.solution-work strong {
+  color: var(--warning);
+}
+
+.batch-solution {
+  font-size: 0.85rem;
+  padding: 8px 12px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.stat-q-solution {
+  margin: 8px 0;
+  padding: 10px;
+  background: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid var(--warning);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .countdown {
   text-align: center;
   color: var(--text-secondary);
@@ -736,6 +813,20 @@ input:focus {
   font-size: 1.5rem;
   font-weight: bold;
   color: var(--secondary);
+}
+
+.gameover-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.gameover-buttons .btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Toast */

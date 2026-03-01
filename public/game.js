@@ -74,7 +74,10 @@ const elements = {
   winnerTitle: document.getElementById('winner-title'),
   winnerName: document.getElementById('winner-name'),
   finalScores: document.getElementById('final-scores'),
-  bgTimer: document.getElementById('bg-timer')
+  bgTimer: document.getElementById('bg-timer'),
+  hintContainer: document.getElementById('hint-container'),
+  hintBtn: document.getElementById('hint-btn'),
+  hintDisplay: document.getElementById('hint-display')
 };
 
 // Utility functions
@@ -164,35 +167,43 @@ function stopStopwatch() {
 }
 
 // Background timer functions
-let bgTimerDuration = 0;
+let bgTimerInterval = null;
+let bgTimerStartTime = 0;
 
 function startBgTimer(seconds) {
   if (!elements.bgTimer) return;
 
-  // Reset the timer
-  elements.bgTimer.classList.remove('active');
-  elements.bgTimer.style.width = '0%';
-
-  if (seconds === 0) {
-    // No time limit - use a long duration (5 minutes)
-    bgTimerDuration = 300;
-  } else {
-    bgTimerDuration = seconds;
+  // Clear any existing interval
+  if (bgTimerInterval) {
+    clearInterval(bgTimerInterval);
+    bgTimerInterval = null;
   }
 
-  // Force reflow to reset the animation
-  void elements.bgTimer.offsetWidth;
-
-  // Start the animation
+  // Reset and show the timer
+  elements.bgTimer.textContent = '00:00:00';
   elements.bgTimer.classList.add('active');
-  elements.bgTimer.style.transitionDuration = bgTimerDuration + 's';
-  elements.bgTimer.style.width = '100%';
+  bgTimerStartTime = Date.now();
+
+  // Update every 10ms for smooth millisecond display
+  bgTimerInterval = setInterval(() => {
+    const elapsed = Date.now() - bgTimerStartTime;
+    const minutes = Math.floor(elapsed / 60000);
+    const secs = Math.floor((elapsed % 60000) / 1000);
+    const ms = Math.floor((elapsed % 1000) / 10);
+    elements.bgTimer.textContent =
+      String(minutes).padStart(2, '0') + ':' +
+      String(secs).padStart(2, '0') + ':' +
+      String(ms).padStart(2, '0');
+  }, 10);
 }
 
 function stopBgTimer() {
+  if (bgTimerInterval) {
+    clearInterval(bgTimerInterval);
+    bgTimerInterval = null;
+  }
   if (!elements.bgTimer) return;
   elements.bgTimer.classList.remove('active');
-  elements.bgTimer.style.width = '0%';
 }
 
 function updateSettingsSummary() {
@@ -386,6 +397,14 @@ elements.answerInput.addEventListener('keypress', (e) => {
 
 document.getElementById('submit-answer-btn').addEventListener('click', submitAnswer);
 
+// Hint button
+if (elements.hintBtn) {
+  elements.hintBtn.addEventListener('click', () => {
+    socket.emit('request-hint');
+    elements.hintBtn.disabled = true;
+  });
+}
+
 function submitAnswer() {
   const answer = elements.answerInput.value.trim();
   if (answer === '') {
@@ -402,6 +421,17 @@ function submitAnswer() {
 // Play again
 document.getElementById('play-again-btn').addEventListener('click', () => {
   socket.emit('play-again');
+});
+
+// Return to lobby (host only)
+const returnToLobbyBtn = document.getElementById('return-to-lobby-btn');
+returnToLobbyBtn.addEventListener('click', () => {
+  socket.emit('return-to-lobby');
+});
+
+// Return to lobby from results screen (host only)
+document.getElementById('results-return-lobby-btn').addEventListener('click', () => {
+  socket.emit('return-to-lobby');
 });
 
 // Next round button
@@ -470,10 +500,16 @@ socket.on('settings-updated', (settings) => {
   updateSettingsSummary();
 });
 
-function updateLobbyPlayers(players) {
+let lastWinnerId = null;
+
+function updateLobbyPlayers(players, winnerId = null) {
+  if (winnerId !== null) {
+    lastWinnerId = winnerId;
+  }
   elements.lobbyPlayers.innerHTML = players.map(p => `
         <div class="player-item ${p.id === myId ? 'you' : ''}">
             <span class="player-name">
+                ${p.id === lastWinnerId ? '<span class="material-icons crown-icon">workspace_premium</span>' : ''}
                 ${p.name}
                 ${p.id === myId ? '<span class="player-badge">You</span>' : ''}
             </span>
@@ -521,7 +557,7 @@ socket.on('bet-placed', ({ playerId, players }) => {
   }
 });
 
-socket.on('question-start', ({ question, questionNumber, totalQuestions, timeLimit, batchIndex, batchTotal, category }) => {
+socket.on('question-start', ({ question, questionNumber, totalQuestions, timeLimit, batchIndex, batchTotal, category, hint }) => {
   elements.gameQuestionNum.textContent = questionNumber;
   elements.gameTotalQuestions.textContent = totalQuestions;
   elements.mathProblem.textContent = question;
@@ -530,6 +566,15 @@ socket.on('question-start', ({ question, questionNumber, totalQuestions, timeLim
   document.getElementById('submit-answer-btn').disabled = false;
   elements.answerStatus.textContent = '';
   elements.answerInput.focus();
+
+  // Reset and setup hint system
+  if (elements.hintContainer && elements.hintBtn && elements.hintDisplay) {
+    elements.hintContainer.classList.remove('hidden');
+    elements.hintBtn.classList.remove('hidden');
+    elements.hintBtn.disabled = false;
+    elements.hintDisplay.classList.add('hidden');
+    elements.hintDisplay.textContent = '';
+  }
 
   // Update batch progress if applicable
   if (batchTotal && batchTotal > 1) {
@@ -562,6 +607,14 @@ socket.on('answer-submitted', ({ playerId }) => {
   }
 });
 
+socket.on('hint-response', ({ hint }) => {
+  if (elements.hintBtn && elements.hintDisplay) {
+    elements.hintBtn.classList.add('hidden');
+    elements.hintDisplay.textContent = hint;
+    elements.hintDisplay.classList.remove('hidden');
+  }
+});
+
 socket.on('round-results', (results) => {
   clearInterval(timerInterval);
   stopStopwatch();
@@ -579,8 +632,7 @@ socket.on('round-results', (results) => {
           <div class="batch-question-header">
             <span class="question-text">${q.question} = ${q.correctAnswer}</span>
             <span class="question-category">${categories[q.category] || q.category}</span>
-          </div>
-          <div class="batch-answers">
+          </div>          ${q.solution ? `<div class="solution-work batch-solution">${q.solution.replace(/\n/g, '<br>')}</div>` : ''}          <div class="batch-answers">
             ${q.answers.map(a => `
               <span class="batch-answer ${a.correct ? 'correct' : 'wrong'}">
                 ${a.name}: ${a.answer !== null ? a.answer : 'No answer'}
@@ -623,6 +675,7 @@ socket.on('round-results', (results) => {
           <span class="question-text">${results.question} = ${results.correctAnswer}</span>
           <span class="question-category">${categories[results.category] || results.category || ''}</span>
         </div>
+        ${results.solution ? `<div class="solution-work"><strong>Solution:</strong><br>${results.solution.replace(/\n/g, '<br>')}</div>` : ''}
       </div>
       ${results.results.map(r => `
         <div class="result-item ${r.correct && results.winner && r.id === results.winner.id ? 'winner' : ''} ${!r.correct ? 'wrong' : ''}">
@@ -705,6 +758,7 @@ socket.on('round-results', (results) => {
             </div>
             <div class="stat-q-details">
               <div class="stat-q-problem">${results.question} = ${results.correctAnswer}</div>
+              ${results.solution ? `<div class="stat-q-solution">${results.solution.replace(/\n/g, '<br>')}</div>` : ''}
               <div class="stat-q-answer">Your answer: <strong>${myResult.answer !== null ? myResult.answer : 'No answer'}</strong></div>
               <div class="stat-q-time"><span class="material-icons">timer</span> ${myResult.time ? (myResult.time / 1000).toFixed(2) + 's' : 'N/A'}</div>
             </div>
@@ -737,14 +791,21 @@ socket.on('round-results', (results) => {
 
   showScreen('results');
 
-  // Show Next Round button
+  // Show Next Round button or Return to Lobby button
+  const resultsReturnLobbyBtn = document.getElementById('results-return-lobby-btn');
   if (results.gameOver) {
     elements.nextRoundBtn.classList.add('hidden');
-    elements.nextRoundStatus.textContent = 'Game Over! Final results coming...';
+    elements.nextRoundStatus.textContent = 'Game Over!';
+    if (isHost) {
+      resultsReturnLobbyBtn.classList.remove('hidden');
+    } else {
+      resultsReturnLobbyBtn.classList.add('hidden');
+    }
   } else {
     elements.nextRoundBtn.classList.remove('hidden');
     elements.nextRoundBtn.disabled = false;
     elements.nextRoundStatus.textContent = '';
+    resultsReturnLobbyBtn.classList.add('hidden');
   }
 });
 
@@ -773,11 +834,19 @@ socket.on('game-over', (results) => {
         </div>
     `).join('');
 
+  // Show return to lobby button only for host
+  const returnToLobbyBtn = document.getElementById('return-to-lobby-btn');
+  if (isHost) {
+    returnToLobbyBtn.classList.remove('hidden');
+  } else {
+    returnToLobbyBtn.classList.add('hidden');
+  }
+
   showScreen('gameover');
 });
 
-socket.on('game-reset', ({ players }) => {
-  updateLobbyPlayers(players);
+socket.on('game-reset', ({ players, lastWinnerId: winnerId }) => {
+  updateLobbyPlayers(players, winnerId);
   showScreen('lobby');
   showToast('Game reset! Ready for a new match.');
 });

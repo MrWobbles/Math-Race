@@ -32,30 +32,33 @@ const problemGenerators = {
   // Basic Arithmetic
   arithmetic: () => {
     const ops = [
-      { symbol: '+', fn: (a, b) => a + b },
-      { symbol: '-', fn: (a, b) => a - b },
-      { symbol: '×', fn: (a, b) => a * b },
-      { symbol: '÷', fn: (a, b) => a / b }
+      { symbol: '+', fn: (a, b) => a + b, name: 'add', hint: 'Addition: a + b = sum' },
+      { symbol: '-', fn: (a, b) => a - b, name: 'subtract', hint: 'Subtraction: a - b = difference' },
+      { symbol: '×', fn: (a, b) => a * b, name: 'multiply', hint: 'Multiplication: a × b = product' },
+      { symbol: '÷', fn: (a, b) => a / b, name: 'divide', hint: 'Division: a ÷ b = quotient' }
     ];
     const op = ops[randomInt(0, 3)];
-    let a, b, answer;
+    let a, b, answer, solution;
 
     if (op.symbol === '÷') {
       b = randomInt(2, 12);
       answer = randomInt(2, 15);
       a = b * answer;
+      solution = `${a} ÷ ${b} = ${answer}`;
     } else if (op.symbol === '×') {
       a = randomInt(2, 12);
       b = randomInt(2, 12);
       answer = op.fn(a, b);
+      solution = `${a} × ${b} = ${answer}`;
     } else {
       a = randomInt(10, 150);
       b = randomInt(5, 100);
       if (op.symbol === '-' && b > a) [a, b] = [b, a];
       answer = op.fn(a, b);
+      solution = `${a} ${op.symbol} ${b} = ${answer}`;
     }
 
-    return { question: `${a} ${op.symbol} ${b} = ?`, answer };
+    return { question: `${a} ${op.symbol} ${b} = ?`, answer, solution, hint: op.hint };
   },
 
   // Fractions - Addition/Subtraction
@@ -69,9 +72,12 @@ const problemGenerators = {
       const denom = randomInt(2, 8);
       const num = simplified * divisor;
       const denomFull = denom * divisor;
+      const answer = roundTo(simplified / denom, 2);
       return {
         question: `Simplify: ${num}/${denomFull} (answer as decimal)`,
-        answer: roundTo(simplified / denom, 2)
+        answer,
+        solution: `${num}/${denomFull} = ${simplified}/${denom} (divide both by ${divisor})\n${simplified} ÷ ${denom} = ${answer}`,
+        hint: 'Simplify: Divide numerator and denominator by GCD, then convert to decimal'
       };
     }
 
@@ -80,37 +86,68 @@ const problemGenerators = {
     const num2 = randomInt(1, denom - 1);
 
     if (type === 'add') {
-      const answer = roundTo((num1 + num2) / denom, 2);
-      return { question: `${num1}/${denom} + ${num2}/${denom} = ? (decimal)`, answer };
+      const sum = num1 + num2;
+      const answer = roundTo(sum / denom, 2);
+      return {
+        question: `${num1}/${denom} + ${num2}/${denom} = ? (decimal)`,
+        answer,
+        solution: `(${num1} + ${num2})/${denom} = ${sum}/${denom}\n${sum} ÷ ${denom} = ${answer}`,
+        hint: 'Same denominator: (a + b) / d = result, then divide'
+      };
     } else if (type === 'subtract') {
       const [n1, n2] = num1 > num2 ? [num1, num2] : [num2, num1];
-      const answer = roundTo((n1 - n2) / denom, 2);
-      return { question: `${n1}/${denom} - ${n2}/${denom} = ? (decimal)`, answer };
+      const diff = n1 - n2;
+      const answer = roundTo(diff / denom, 2);
+      return {
+        question: `${n1}/${denom} - ${n2}/${denom} = ? (decimal)`,
+        answer,
+        solution: `(${n1} - ${n2})/${denom} = ${diff}/${denom}\n${diff} ÷ ${denom} = ${answer}`,
+        hint: 'Same denominator: (a - b) / d = result, then divide'
+      };
     } else {
       const denom2 = randomInt(2, 6);
       const num2b = randomInt(1, denom2);
-      const answer = roundTo((num1 * num2b) / (denom * denom2), 2);
-      return { question: `${num1}/${denom} × ${num2b}/${denom2} = ? (decimal)`, answer };
+      const numResult = num1 * num2b;
+      const denomResult = denom * denom2;
+      const answer = roundTo(numResult / denomResult, 2);
+      return {
+        question: `${num1}/${denom} × ${num2b}/${denom2} = ? (decimal)`,
+        answer,
+        solution: `(${num1} × ${num2b})/(${denom} × ${denom2}) = ${numResult}/${denomResult}\n${numResult} ÷ ${denomResult} = ${answer}`,
+        hint: 'Multiply fractions: (a/b) × (c/d) = (a×c)/(b×d)'
+      };
     }
   },
 
   // Decimals
   decimals: () => {
-    const ops = ['+', '-', '×'];
-    const op = ops[randomInt(0, 2)];
+    const ops = [
+      { symbol: '+', hint: 'Decimal addition: Line up decimal points and add' },
+      { symbol: '-', hint: 'Decimal subtraction: Line up decimal points and subtract' },
+      { symbol: '×', hint: 'Decimal multiplication: Multiply, count total decimal places' }
+    ];
+    const opObj = ops[randomInt(0, 2)];
+    const op = opObj.symbol;
     const a = roundTo(randomInt(10, 99) / 10, 1);
     const b = roundTo(randomInt(10, 99) / 10, 1);
 
-    let answer;
-    if (op === '+') answer = roundTo(a + b, 2);
-    else if (op === '-') answer = roundTo(Math.abs(a - b), 2);
-    else answer = roundTo(a * b, 2);
+    let answer, solution, question;
+    if (op === '+') {
+      answer = roundTo(a + b, 2);
+      question = `${a} + ${b} = ?`;
+      solution = `${a} + ${b} = ${answer}`;
+    } else if (op === '-') {
+      const [x, y] = a > b ? [a, b] : [b, a];
+      answer = roundTo(x - y, 2);
+      question = `${x} - ${y} = ?`;
+      solution = `${x} - ${y} = ${answer}`;
+    } else {
+      answer = roundTo(a * b, 2);
+      question = `${a} × ${b} = ?`;
+      solution = `${a} × ${b} = ${answer}`;
+    }
 
-    const question = op === '-' && b > a
-      ? `${b} ${op} ${a} = ?`
-      : `${a} ${op} ${b} = ?`;
-
-    return { question, answer };
+    return { question, answer, solution, hint: opObj.hint };
   },
 
   // Percentages
@@ -119,20 +156,35 @@ const problemGenerators = {
     const type = types[randomInt(0, 2)];
 
     if (type === 'findPercent') {
-      const percent = randomInt(1, 10) * 5; // 5, 10, 15, ... 50
-      const whole = randomInt(2, 20) * 10; // 20, 30, ... 200
+      const percent = randomInt(1, 10) * 5;
+      const whole = randomInt(2, 20) * 10;
       const answer = (percent / 100) * whole;
-      return { question: `What is ${percent}% of ${whole}?`, answer };
+      return {
+        question: `What is ${percent}% of ${whole}?`,
+        answer,
+        solution: `${percent}% = ${percent}/100 = ${percent / 100}\n${percent / 100} × ${whole} = ${answer}`,
+        hint: 'Find percent: (percent / 100) × whole = answer'
+      };
     } else if (type === 'whatPercent') {
       const part = randomInt(1, 10) * 5;
       const whole = randomInt(2, 5) * part;
       const answer = (part / whole) * 100;
-      return { question: `${part} is what % of ${whole}?`, answer };
+      return {
+        question: `${part} is what % of ${whole}?`,
+        answer,
+        solution: `(${part} ÷ ${whole}) × 100\n= ${roundTo(part / whole, 4)} × 100\n= ${answer}%`,
+        hint: 'What percent: (part ÷ whole) × 100 = percent'
+      };
     } else {
       const result = randomInt(2, 10) * 5;
       const percent = randomInt(1, 5) * 10;
       const whole = (result / percent) * 100;
-      return { question: `${result} is ${percent}% of what number?`, answer: whole };
+      return {
+        question: `${result} is ${percent}% of what number?`,
+        answer: whole,
+        solution: `${result} = ${percent}% × x\nx = ${result} ÷ (${percent}/100)\nx = ${result} ÷ ${percent / 100}\nx = ${whole}`,
+        hint: 'Find whole: result ÷ (percent / 100) = whole'
+      };
     }
   },
 
@@ -146,24 +198,37 @@ const problemGenerators = {
       const a = randomInt(1, 6) * common;
       const b = randomInt(1, 6) * common;
       const g = gcd(a, b);
+      const answer = a / g;
       return {
         question: `Simplify ratio ${a}:${b}. What is the first number?`,
-        answer: a / g
+        answer,
+        solution: `GCD of ${a} and ${b} is ${g}\n${a}÷${g} : ${b}÷${g} = ${a / g}:${b / g}\nFirst number = ${answer}`,
+        hint: 'Simplify ratio: Divide both by GCD (greatest common divisor)'
       };
     } else if (type === 'solve') {
       const a = randomInt(2, 8);
       const b = randomInt(2, 8);
       const c = randomInt(2, 6) * a;
       const answer = (c * b) / a;
-      return { question: `If ${a}/${b} = ${c}/x, find x`, answer };
+      return {
+        question: `If ${a}/${b} = ${c}/x, find x`,
+        answer,
+        solution: `Cross multiply: ${a} × x = ${b} × ${c}\n${a}x = ${b * c}\nx = ${b * c} ÷ ${a}\nx = ${answer}`,
+        hint: 'Cross multiply: a/b = c/x → a×x = b×c → x = (b×c)/a'
+      };
     } else {
       const total = randomInt(3, 10) * 12;
       const ratio1 = randomInt(1, 4);
       const ratio2 = randomInt(1, 4);
-      const part1 = (total * ratio1) / (ratio1 + ratio2);
+      const parts = ratio1 + ratio2;
+      const part1 = (total * ratio1) / parts;
+      const part2 = (total * ratio2) / parts;
+      const answer = Math.max(part1, part2);
       return {
         question: `Divide ${total} in ratio ${ratio1}:${ratio2}. Larger part?`,
-        answer: Math.max(part1, total - part1)
+        answer,
+        solution: `Total parts = ${ratio1} + ${ratio2} = ${parts}\nEach part = ${total} ÷ ${parts} = ${total / parts}\nPart 1 = ${ratio1} × ${total / parts} = ${part1}\nPart 2 = ${ratio2} × ${total / parts} = ${part2}\nLarger = ${answer}`,
+        hint: 'Divide in ratio: total ÷ (a+b) = unit, then multiply each part'
       };
     }
   },
@@ -176,22 +241,36 @@ const problemGenerators = {
     if (type === 'power') {
       const base = randomInt(2, 6);
       const exp = randomInt(2, 4);
-      return { question: `${base}^${exp} = ?`, answer: Math.pow(base, exp) };
+      const answer = Math.pow(base, exp);
+      const steps = Array(exp).fill(base).join(' × ');
+      return {
+        question: `${base}^${exp} = ?`,
+        answer,
+        solution: `${base}^${exp} = ${steps} = ${answer}`,
+        hint: 'Exponent: base^n = base × base × ... (n times)'
+      };
     } else if (type === 'multiply') {
       const base = randomInt(2, 5);
       const exp1 = randomInt(1, 3);
       const exp2 = randomInt(1, 3);
+      const answer = exp1 + exp2;
       return {
         question: `${base}^${exp1} × ${base}^${exp2} = ${base}^?`,
-        answer: exp1 + exp2
+        answer,
+        solution: `When multiplying same bases, add exponents:\n${base}^${exp1} × ${base}^${exp2} = ${base}^(${exp1}+${exp2}) = ${base}^${answer}`,
+        hint: 'Multiply exponents: a^m × a^n = a^(m+n)'
       };
     } else {
       const base = randomInt(2, 4);
       const exp = randomInt(2, 3);
       const mult = randomInt(2, 5);
+      const power = Math.pow(base, exp);
+      const answer = mult * power;
       return {
         question: `${mult} × ${base}^${exp} = ?`,
-        answer: mult * Math.pow(base, exp)
+        answer,
+        solution: `First: ${base}^${exp} = ${power}\nThen: ${mult} × ${power} = ${answer}`,
+        hint: 'Evaluate: First calculate the exponent, then multiply'
       };
     }
   },
@@ -204,15 +283,36 @@ const problemGenerators = {
 
     if (type === 'basic') {
       const sq = perfectSquares[randomInt(0, perfectSquares.length - 1)];
-      return { question: `√${sq} = ?`, answer: Math.sqrt(sq) };
+      const answer = Math.sqrt(sq);
+      return {
+        question: `√${sq} = ?`,
+        answer,
+        solution: `√${sq} = ${answer} because ${answer} × ${answer} = ${sq}`,
+        hint: 'Square root: √n = x where x × x = n'
+      };
     } else if (type === 'multiply') {
       const sq = perfectSquares[randomInt(0, 5)];
       const mult = randomInt(2, 6);
-      return { question: `${mult} × √${sq} = ?`, answer: mult * Math.sqrt(sq) };
+      const sqRoot = Math.sqrt(sq);
+      const answer = mult * sqRoot;
+      return {
+        question: `${mult} × √${sq} = ?`,
+        answer,
+        solution: `√${sq} = ${sqRoot}\n${mult} × ${sqRoot} = ${answer}`,
+        hint: 'Multiply root: k × √n = k × (root of n)'
+      };
     } else {
       const sq1 = perfectSquares[randomInt(0, 4)];
       const sq2 = perfectSquares[randomInt(0, 4)];
-      return { question: `√${sq1} + √${sq2} = ?`, answer: Math.sqrt(sq1) + Math.sqrt(sq2) };
+      const root1 = Math.sqrt(sq1);
+      const root2 = Math.sqrt(sq2);
+      const answer = root1 + root2;
+      return {
+        question: `√${sq1} + √${sq2} = ?`,
+        answer,
+        solution: `√${sq1} = ${root1}\n√${sq2} = ${root2}\n${root1} + ${root2} = ${answer}`,
+        hint: 'Add roots: Find each root separately, then add'
+      };
     }
   },
 
@@ -229,25 +329,51 @@ const problemGenerators = {
       const op = ops[randomInt(0, 2)];
 
       if (op === '×') {
-        return { question: `${a}x = ${b}. Find x`, answer: x };
+        return {
+          question: `${a}x = ${b}. Find x`,
+          answer: x,
+          solution: `${a}x = ${b}\nDivide both sides by ${a}:\nx = ${b} ÷ ${a}\nx = ${x}`,
+          hint: 'ax = b → x = b ÷ a'
+        };
       } else if (op === '+') {
-        return { question: `x + ${a} = ${b}. Find x`, answer: b - a };
+        const answer = b - a;
+        return {
+          question: `x + ${a} = ${b}. Find x`,
+          answer,
+          solution: `x + ${a} = ${b}\nSubtract ${a} from both sides:\nx = ${b} - ${a}\nx = ${answer}`,
+          hint: 'x + a = b → x = b - a'
+        };
       } else {
-        return { question: `x - ${a} = ${b - a}. Find x`, answer: b };
+        return {
+          question: `x - ${a} = ${b - a}. Find x`,
+          answer: b,
+          solution: `x - ${a} = ${b - a}\nAdd ${a} to both sides:\nx = ${b - a} + ${a}\nx = ${b}`,
+          hint: 'x - a = b → x = b + a'
+        };
       }
     } else if (type === 'twoStep') {
       const x = randomInt(2, 10);
       const a = randomInt(2, 6);
       const b = randomInt(1, 10);
       const result = a * x + b;
-      return { question: `${a}x + ${b} = ${result}. Find x`, answer: x };
+      return {
+        question: `${a}x + ${b} = ${result}. Find x`,
+        answer: x,
+        solution: `${a}x + ${b} = ${result}\nSubtract ${b}: ${a}x = ${result} - ${b} = ${result - b}\nDivide by ${a}: x = ${result - b} ÷ ${a} = ${x}`,
+        hint: 'ax + b = c → ax = c - b → x = (c-b)/a'
+      };
     } else {
       const x = randomInt(2, 8);
       const a = randomInt(2, 5);
       const b = randomInt(1, 5);
       const c = randomInt(1, a - 1);
       const d = (a - c) * x + b;
-      return { question: `${a}x + ${b} = ${c}x + ${d}. Find x`, answer: x };
+      return {
+        question: `${a}x + ${b} = ${c}x + ${d}. Find x`,
+        answer: x,
+        solution: `${a}x + ${b} = ${c}x + ${d}\nSubtract ${c}x: ${a - c}x + ${b} = ${d}\nSubtract ${b}: ${a - c}x = ${d - b}\nDivide by ${a - c}: x = ${d - b} ÷ ${a - c} = ${x}`,
+        hint: 'Get all x terms on one side, constants on other, then solve'
+      };
     }
   },
 
@@ -255,63 +381,114 @@ const problemGenerators = {
   wordProblems: () => {
     const problems = [
       () => {
-        const v = randomInt(12, 24) * 10; // Voltage
-        const r = randomInt(2, 10) * 10;  // Resistance
+        const v = randomInt(12, 24) * 10;
+        const r = randomInt(2, 10) * 10;
         const i = v / r;
-        return { question: `Ohm's Law: V=${v}V, R=${r}Ω. Find I (amps)`, answer: i };
+        return {
+          question: `Ohm's Law: V=${v}V, R=${r}Ω. Find I (amps)`,
+          answer: i,
+          solution: `Ohm's Law: I = V ÷ R\nI = ${v}V ÷ ${r}Ω\nI = ${i}A`,
+          hint: "Ohm's Law: I = V / R (Current = Voltage / Resistance)"
+        };
       },
       () => {
         const i = randomInt(5, 20);
         const r = randomInt(2, 15);
         const v = i * r;
-        return { question: `Ohm's Law: I=${i}A, R=${r}Ω. Find V (volts)`, answer: v };
+        return {
+          question: `Ohm's Law: I=${i}A, R=${r}Ω. Find V (volts)`,
+          answer: v,
+          solution: `Ohm's Law: V = I × R\nV = ${i}A × ${r}Ω\nV = ${v}V`,
+          hint: "Ohm's Law: V = I × R (Voltage = Current × Resistance)"
+        };
       },
       () => {
         const v = randomInt(10, 25) * 10;
         const i = randomInt(2, 10);
         const p = v * i;
-        return { question: `Power: V=${v}V, I=${i}A. Find P (watts)`, answer: p };
+        return {
+          question: `Power: V=${v}V, I=${i}A. Find P (watts)`,
+          answer: p,
+          solution: `Power formula: P = V × I\nP = ${v}V × ${i}A\nP = ${p}W`,
+          hint: 'Power: P = V × I (Watts = Volts × Amps)'
+        };
       },
       () => {
         const totalFeet = randomInt(5, 20) * 10;
         const inches = totalFeet * 12;
-        return { question: `Convert ${totalFeet} feet to inches`, answer: inches };
+        return {
+          question: `Convert ${totalFeet} feet to inches`,
+          answer: inches,
+          solution: `1 foot = 12 inches\n${totalFeet} feet × 12 = ${inches} inches`,
+          hint: 'Conversion: 1 foot = 12 inches'
+        };
       },
       () => {
         const hours = randomInt(3, 8);
         const rate = randomInt(25, 75);
         const total = hours * rate;
-        return { question: `${hours} hours labor at $${rate}/hr. Total cost?`, answer: total };
+        return {
+          question: `${hours} hours labor at $${rate}/hr. Total cost?`,
+          answer: total,
+          solution: `Total = Hours × Rate\nTotal = ${hours} × $${rate}\nTotal = $${total}`,
+          hint: 'Labor cost: Total = Hours × Hourly rate'
+        };
       },
       () => {
         const watts = randomInt(10, 100) * 10;
         const hours = randomInt(2, 10);
         const kwh = (watts * hours) / 1000;
-        return { question: `${watts}W for ${hours} hrs = ? kWh`, answer: kwh };
+        return {
+          question: `${watts}W for ${hours} hrs = ? kWh`,
+          answer: kwh,
+          solution: `kWh = (Watts × Hours) ÷ 1000\nkWh = (${watts} × ${hours}) ÷ 1000\nkWh = ${watts * hours} ÷ 1000\nkWh = ${kwh}`,
+          hint: 'Energy: kWh = (Watts × Hours) ÷ 1000'
+        };
       },
       () => {
         const boxes = randomInt(3, 8);
         const perBox = randomInt(10, 25);
         const total = boxes * perBox;
-        return { question: `${boxes} boxes with ${perBox} outlets each. Total outlets?`, answer: total };
+        return {
+          question: `${boxes} boxes with ${perBox} outlets each. Total outlets?`,
+          answer: total,
+          solution: `Total = Boxes × Outlets per box\nTotal = ${boxes} × ${perBox}\nTotal = ${total} outlets`,
+          hint: 'Total = Groups × Items per group'
+        };
       },
       () => {
         const runs = randomInt(3, 6);
         const feetPer = randomInt(20, 50);
         const total = runs * feetPer;
-        return { question: `${runs} wire runs, ${feetPer} ft each. Total feet?`, answer: total };
+        return {
+          question: `${runs} wire runs, ${feetPer} ft each. Total feet?`,
+          answer: total,
+          solution: `Total = Runs × Feet per run\nTotal = ${runs} × ${feetPer}\nTotal = ${total} feet`,
+          hint: 'Total = Number of runs × Length each'
+        };
       },
       () => {
         const price = randomInt(50, 200);
         const discount = randomInt(1, 4) * 5;
-        const final = price * (1 - discount / 100);
-        return { question: `$${price} item, ${discount}% off. Sale price?`, answer: final };
+        const savings = (price * discount) / 100;
+        const final = price - savings;
+        return {
+          question: `$${price} item, ${discount}% off. Sale price?`,
+          answer: final,
+          solution: `Discount = ${discount}% of $${price}\nDiscount = $${price} × ${discount / 100} = $${savings}\nSale price = $${price} - $${savings} = $${final}`,
+          hint: 'Sale price = Original - (Original × discount%)'
+        };
       },
       () => {
         const circuits = randomInt(10, 20);
         const amps = 15;
         const total = circuits * amps;
-        return { question: `${circuits} circuits × ${amps}A each = total amps?`, answer: total };
+        return {
+          question: `${circuits} circuits × ${amps}A each = total amps?`,
+          answer: total,
+          solution: `Total amps = Circuits × Amps each\nTotal = ${circuits} × ${amps}A\nTotal = ${total}A`,
+          hint: 'Total = Number of circuits × Amps per circuit'
+        };
       }
     ];
 
@@ -542,6 +719,7 @@ function startQuestionRound(room) {
     p.answerTime = null;
     p.batchAnswers = [];
     p.batchCorrect = 0;
+    p.usedHint = false;
   });
 
   return room;
@@ -556,6 +734,7 @@ function nextBatchQuestion(room) {
     room.players.forEach(p => {
       p.currentAnswer = null;
       p.answerTime = null;
+      p.usedHint = false;
     });
     return true;
   }
@@ -661,6 +840,10 @@ function calculateRoundResults(room) {
         if (p.id === winner.id) {
           // Winner gets points and opponent's bet
           pointsEarned = 10 + Math.floor((5000 - Math.min(p.answerTime, 5000)) / 100);
+          // Apply 75% penalty if hint was used
+          if (p.usedHint) {
+            pointsEarned = Math.floor(pointsEarned * 0.75);
+          }
           const opponent = room.players.find(op => op.id !== p.id);
           if (opponent) {
             coinsChange = opponent.bet;
@@ -669,6 +852,9 @@ function calculateRoundResults(room) {
           // Loser loses their bet (even if they got it correct but slower)
           if (correct) {
             pointsEarned = 5; // Some points for being correct
+            if (p.usedHint) {
+              pointsEarned = Math.floor(pointsEarned * 0.75);
+            }
           }
           coinsChange = -p.bet;
         }
@@ -1037,15 +1223,35 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Play again
-  socket.on('play-again', () => {
+  // Request hint
+  socket.on('request-hint', () => {
     const roomCode = playerRooms.get(socket.id);
     const room = rooms.get(roomCode);
-    if (!room) return;
+    if (!room || room.state !== 'playing') return;
+
+    const player = room.players.find(p => p.id === socket.id);
+    if (player && !player.usedHint) {
+      player.usedHint = true;
+      socket.emit('hint-response', {
+        hint: room.currentProblem.hint || 'No hint available'
+      });
+    }
+  });
+
+  // Return to lobby (host only)
+  socket.on('return-to-lobby', () => {
+    const roomCode = playerRooms.get(socket.id);
+    const room = rooms.get(roomCode);
+    if (!room || room.host !== socket.id) return;
+
+    // Find the winner before resetting scores
+    const sortedPlayers = [...room.players].sort((a, b) => b.score - a.score);
+    const lastWinnerId = sortedPlayers[0]?.score > 0 ? sortedPlayers[0].id : null;
 
     room.state = 'waiting';
     room.questionNumber = 0;
     room.roundStats = [];
+    room.lastWinnerId = lastWinnerId;
     room.players.forEach(p => {
       p.score = 0;
       p.coins = 100;
@@ -1056,7 +1262,37 @@ io.on('connection', (socket) => {
 
     io.to(roomCode).emit('game-reset', {
       players: room.players,
-      settings: room.settings
+      settings: room.settings,
+      lastWinnerId: lastWinnerId
+    });
+  });
+
+  // Play again
+  socket.on('play-again', () => {
+    const roomCode = playerRooms.get(socket.id);
+    const room = rooms.get(roomCode);
+    if (!room) return;
+
+    // Find the winner before resetting scores
+    const sortedPlayers = [...room.players].sort((a, b) => b.score - a.score);
+    const lastWinnerId = sortedPlayers[0]?.score > 0 ? sortedPlayers[0].id : null;
+
+    room.state = 'waiting';
+    room.questionNumber = 0;
+    room.roundStats = [];
+    room.lastWinnerId = lastWinnerId;
+    room.players.forEach(p => {
+      p.score = 0;
+      p.coins = 100;
+      p.ready = false;
+      p.batchAnswers = [];
+      p.batchCorrect = 0;
+    });
+
+    io.to(roomCode).emit('game-reset', {
+      players: room.players,
+      settings: room.settings,
+      lastWinnerId: lastWinnerId
     });
   });
 
@@ -1126,6 +1362,7 @@ function emitQuestionStart(roomCode, room) {
     question: room.currentProblem.question,
     category: room.currentProblem.category,
     categoryName: room.currentProblem.categoryName,
+    hint: room.currentProblem.hint,
     questionNumber: room.questionNumber + room.currentBatchIndex + 1,
     totalQuestions: room.totalQuestions,
     batchIndex: room.currentBatchIndex,

@@ -170,6 +170,11 @@
 
       <div class="problem-display">
         <div class="problem" id="math-problem">?</div>
+        <div id="hint-container" class="hint-container hidden">
+          <button id="hint-btn" class="btn hint-btn"><span class="material-icons">lightbulb</span> Show Hint (75%
+            points)</button>
+          <div id="hint-display" class="hint-display hidden"></div>
+        </div>
       </div>
 
       <div class="answer-section">
@@ -198,6 +203,8 @@
       </div>
 
       <button id="next-round-btn" class="btn primary">Next Round</button>
+      <button id="results-return-lobby-btn" class="btn secondary hidden"><span class="material-icons">group</span>
+        Return to Lobby</button>
       <div id="next-round-status" class="status-message"></div>
       <div id="next-round-timer" class="countdown hidden"></div>
     </div>
@@ -214,7 +221,11 @@
         <!-- Final scores -->
       </div>
 
-      <button id="play-again-btn" class="btn primary">Play Again</button>
+      <div class="gameover-buttons">
+        <button id="play-again-btn" class="btn primary">Play Again</button>
+        <button id="return-to-lobby-btn" class="btn secondary hidden"><span class="material-icons">group</span> Return
+          to Lobby</button>
+      </div>
     </div>
   </div>
 
